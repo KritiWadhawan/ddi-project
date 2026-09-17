@@ -1,0 +1,13 @@
+split,model,set,acc,macro_f1
+transductive,majority,val,0.317,0.006
+transductive,majority,test,0.318,0.006
+transductive,RF+Morgan,val,0.880,0.808
+transductive,RF+Morgan,test,0.877,0.803
+S1,majority,val,0.334,0.008
+S1,majority,test,0.309,0.008
+S1,RF+Morgan,val,0.440,0.233
+S1,RF+Morgan,test,0.444,0.331
+S2,majority,val,0.324,0.006
+S2,majority,test,0.311,0.006
+S2,RF+Morgan,val,0.711,0.563
+S2,RF+Morgan,test,0.711,0.587

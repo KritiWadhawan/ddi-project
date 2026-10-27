@@ -6,33 +6,35 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import rdFingerprintGenerator
 
-CACHE = Path(__file__).resolve().parent.parent / "data" / "morgan_fp_cache.npz"
+ROOT = Path(__file__).resolve().parent.parent
+DRUGS = ROOT / "data" / "drugs.parquet"
 
-_GEN = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024)
+RADIUS = 2
+N_BITS = 2048
+CACHE = ROOT / "data" / f"morgan_r{RADIUS}_{N_BITS}_cache.npz"
+
+_GEN = rdFingerprintGenerator.GetMorganGenerator(radius=RADIUS, fpSize=N_BITS)
 
 
 def _fp(smiles: str) -> np.ndarray:
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
-        return np.zeros(1024, dtype=np.uint8)
+        raise ValueError(f"unparseable SMILES (clean.py should have dropped it): {smiles}")
     return np.array(_GEN.GetFingerprint(mol), dtype=np.uint8)
 
 
-def build_fp_table(df: pd.DataFrame) -> dict[str, np.ndarray]:
-    """Map drug ID -> 1024-bit Morgan fingerprint, computed once per unique drug."""
+def build_fp_table() -> dict[str, np.ndarray]:
+    """Map drug ID -> Morgan fingerprint, computed once per drug in the cleaned drug table."""
     if CACHE.exists():
         z = np.load(CACHE)
         return {k: z[k] for k in z.files}
 
-    id_to_smiles = dict(zip(df.ID1, df.X1)) | dict(zip(df.ID2, df.X2))
-    table = {drug_id: _fp(smi) for drug_id, smi in id_to_smiles.items()}
+    drugs = pd.read_parquet(DRUGS)
+    table = {drug_id: _fp(smi) for drug_id, smi in zip(drugs.ID, drugs.SMILES)}
     np.savez_compressed(CACHE, **table)
     return table
 
 
 if __name__ == "__main__":
-    from splits import load_data
-
-    df = load_data()
-    table = build_fp_table(df)
-    print(f"cached {len(table)} drug fingerprints -> {CACHE}")
+    table = build_fp_table()
+    print(f"cached {len(table)} drug fingerprints ({N_BITS} bits) -> {CACHE}")

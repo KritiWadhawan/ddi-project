@@ -1,0 +1,13 @@
+split,model,set,n_seeds,acc_mean,acc_std,macro_f1_mean,macro_f1_std,micro_f1_mean,micro_f1_std
+transductive,majority,val,1,0.319,,0.006,,0.319,
+transductive,majority,test,1,0.319,,0.006,,0.319,
+transductive,RF+Morgan,val,1,0.878,,0.804,,0.878,
+transductive,RF+Morgan,test,1,0.879,,0.799,,0.879,
+S1,majority,val,5,0.308,0.008,0.008,0.001,0.308,0.008
+S1,majority,test,5,0.338,0.033,0.009,0.001,0.338,0.033
+S1,RF+Morgan,val,5,0.427,0.008,0.234,0.02,0.427,0.008
+S1,RF+Morgan,test,5,0.465,0.037,0.26,0.044,0.465,0.037
+S2,majority,val,5,0.312,0.004,0.006,0.0,0.312,0.004
+S2,majority,test,5,0.326,0.009,0.006,0.0,0.326,0.009
+S2,RF+Morgan,val,5,0.705,0.013,0.567,0.028,0.705,0.013
+S2,RF+Morgan,test,5,0.726,0.021,0.585,0.019,0.726,0.021

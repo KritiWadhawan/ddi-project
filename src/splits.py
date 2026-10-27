@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-DATA = Path(__file__).resolve().parent.parent / "data" / "drugbank_ddi.parquet"
+DATA = Path(__file__).resolve().parent.parent / "data" / "drugbank_ddi_clean.parquet"
 SPLITS_DIR = Path(__file__).resolve().parent.parent / "results" / "splits"
 
 

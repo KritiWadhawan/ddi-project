@@ -1,0 +1,17 @@
+{
+  "raw_rows": 191808,
+  "raw_classes": 86,
+  "exact_duplicate_rows": 0,
+  "conflicting_pairs": 406,
+  "conflicting_rows_dropped": 812,
+  "same_label_repeat_rows_dropped": 0,
+  "drugs_before_validation": 1706,
+  "invalid_smiles_drugs": {
+    "DB11630": "OC1=CC=CC(=C1)C-1=C2\\CCC(=N2)\\C(=C2/N\\C(\\C=C2)=C(/C2=N/C(/C=C2)=C(\\C2=CC=C\\-1N2)C1=CC(O)=CC=C1)C1=CC(O)=CC=C1)\\C1=CC(O)=CC=C1"
+  },
+  "rows_dropped_for_invalid_smiles": 10,
+  "clean_rows": 190986,
+  "clean_drugs": 1705,
+  "clean_classes": 86,
+  "classes_lost": []
+}

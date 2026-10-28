@@ -90,11 +90,13 @@ class DDIModel(nn.Module):
         inter: bool = True,
         readout: str = "coattn",
         dropout: float = 0.2,
+        gnn_dropout: float = 0.0,
     ):
         super().__init__()
         assert readout in {"coattn", "mean"}
         self.readout = readout
         self.inter = inter
+        self.gnn_dropout = gnn_dropout
         self.input_norm = LayerNorm(ATOM_DIM)
         self.cells = nn.ModuleList(
             Cell(ATOM_DIM if i == 0 else hidden, hidden, heads, inter) for i in range(n_layers)
@@ -118,6 +120,8 @@ class DDIModel(nn.Module):
         for cell, norm, i in zip(self.cells, self.norms, range(len(self.cells))):
             x_a, x_b = cell(x_a, x_b, a.edge_index, b.edge_index, bi_ba)
             x_a, x_b = F.elu(norm(x_a, a.batch)), F.elu(norm(x_b, b.batch))
+            x_a = F.dropout(x_a, self.gnn_dropout, self.training)
+            x_b = F.dropout(x_b, self.gnn_dropout, self.training)
 
             mean_a = global_mean_pool(x_a, a.batch, a.num_graphs)
             mean_b = global_mean_pool(x_b, b.batch, b.num_graphs)

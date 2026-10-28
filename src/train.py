@@ -99,6 +99,13 @@ def main():
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--workers", type=int, default=0, help="DataLoader worker processes")
     p.add_argument("--resume", action="store_true", help="continue from checkpoints/<run>_last.pt")
+    p.add_argument(
+        "--class-weights", choices=["balanced", "sqrt"], default=None,
+        help="balanced: sklearn's inverse frequency, as the RF baseline uses (ranges ~0.04-970 on S1); "
+        "sqrt: inverse square-root frequency, a gentler version",
+    )
+    p.add_argument("--gnn-dropout", type=float, default=0.0, help="dropout on node features after each layer")
+    p.add_argument("--adamw", action="store_true", help="decoupled weight decay (AdamW) instead of Adam's L2")
     args = p.parse_args()
 
     device = torch.device(args.device)
@@ -106,6 +113,16 @@ def main():
         torch.set_num_threads(args.threads)
     set_seed(args.seed)
     run = f"{args.split}_seed{args.seed}_{args.readout}{'_nointer' if args.no_inter else ''}_L{args.layers}"
+    # Non-default training options go in the name so variants never collide (or get
+    # skipped by --resume as already finished).
+    tags = [
+        {"balanced": "cw", "sqrt": "cwsqrt", None: ""}[args.class_weights],
+        f"do{args.gnn_dropout:g}" if args.gnn_dropout else "",
+        "adamw" if args.adamw else "",
+        f"lr{args.lr:g}" if args.lr != 1e-3 else "",
+        f"wd{args.weight_decay:g}" if args.weight_decay != 5e-4 else "",
+    ]
+    run += "".join(f"_{t}" for t in tags if t)
     if args.resume and METRICS_CSV.exists():
         with open(METRICS_CSV, newline="") as f:
             if any(row["model"] == run for row in csv.DictReader(f)):
@@ -124,8 +141,24 @@ def main():
         hidden=args.hidden,
         inter=not args.no_inter,
         readout=args.readout,
+        gnn_dropout=args.gnn_dropout,
     ).to(device)
-    opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optim = torch.optim.AdamW if args.adamw else torch.optim.Adam
+    opt = optim(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    # balanced is sklearn's n_samples / (n_present_classes * count); sqrt uses 1/sqrt(count)
+    # scaled so the per-sample mean weight is 1, like balanced. Classes missing from train
+    # never appear as targets, so their weight is irrelevant; it's left at 0.
+    class_weight = None
+    if args.class_weights:
+        counts = torch.bincount(torch.tensor(train.Y.values - 1), minlength=N_CLASSES).float()
+        present = counts > 0
+        if args.class_weights == "balanced":
+            w = len(train) / (present.sum() * counts.clamp(min=1))
+        else:
+            w = counts.clamp(min=1).rsqrt()
+            w = w * len(train) / (w * counts).sum()
+        class_weight = torch.where(present, w, torch.zeros(())).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"{run}: train={len(train)} val={len(val)} test={len(test)} params={n_params:,} device={device}")
 
@@ -151,7 +184,7 @@ def main():
         model.train()
         t0, total_loss, n_batches = time.time(), 0.0, 0
         for a, b, y in train_loader:
-            loss = F.cross_entropy(model(a.to(device), b.to(device)), y.to(device))
+            loss = F.cross_entropy(model(a.to(device), b.to(device)), y.to(device), weight=class_weight)
             opt.zero_grad()
             loss.backward()
             opt.step()

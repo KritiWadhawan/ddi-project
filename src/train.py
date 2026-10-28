@@ -169,7 +169,9 @@ def main():
     last_ckpt = CHECKPOINTS / f"{run}_last.pt"
     log_rows, best_f1, best_epoch, start_epoch = [], -1.0, 0, 1
     if args.resume and last_ckpt.exists():
-        state = torch.load(last_ckpt, map_location=device, weights_only=False)
+        # Load to CPU: RNG states must stay CPU ByteTensors; load_state_dict moves the
+        # model and optimizer tensors to the model's device itself.
+        state = torch.load(last_ckpt, map_location="cpu", weights_only=False)
         model.load_state_dict(state["model"])
         opt.load_state_dict(state["opt"])
         train_loader.gen.set_state(state["loader_rng"])

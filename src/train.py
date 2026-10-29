@@ -21,6 +21,7 @@ from torch.utils.data import DataLoader
 from torch_geometric.data import Batch
 
 from baselines import METRICS, scores
+from features import N_BITS, build_fp_table
 from graphs import load_graphs
 from model import DDIModel
 from splits import load_data, make_split
@@ -106,6 +107,7 @@ def main():
     )
     p.add_argument("--gnn-dropout", type=float, default=0.0, help="dropout on node features after each layer")
     p.add_argument("--adamw", action="store_true", help="decoupled weight decay (AdamW) instead of Adam's L2")
+    p.add_argument("--fp", action="store_true", help="fuse each drug's Morgan fingerprint into the classifier")
     args = p.parse_args()
 
     device = torch.device(args.device)
@@ -121,6 +123,7 @@ def main():
         "adamw" if args.adamw else "",
         f"lr{args.lr:g}" if args.lr != 1e-3 else "",
         f"wd{args.weight_decay:g}" if args.weight_decay != 5e-4 else "",
+        "fp" if args.fp else "",
     ]
     run += "".join(f"_{t}" for t in tags if t)
     if args.resume and METRICS_CSV.exists():
@@ -130,6 +133,10 @@ def main():
                 return
 
     graphs = load_graphs()
+    if args.fp:
+        # Graph-level attribute, so Batch stacks it to [n_graphs, N_BITS].
+        for drug_id, fp in build_fp_table().items():
+            graphs[drug_id].fp = torch.tensor(fp, dtype=torch.float).unsqueeze(0)
     train, val, test = make_split(args.split, load_data(), args.seed)
     train_loader = PairLoader(train, graphs, args.batch_size, shuffle=True, seed=args.seed, workers=args.workers)
     val_loader = PairLoader(val, graphs, args.batch_size * 2, shuffle=False, workers=args.workers)
@@ -142,6 +149,7 @@ def main():
         inter=not args.no_inter,
         readout=args.readout,
         gnn_dropout=args.gnn_dropout,
+        fp_dim=N_BITS if args.fp else 0,
     ).to(device)
     optim = torch.optim.AdamW if args.adamw else torch.optim.Adam
     opt = optim(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)

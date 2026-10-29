@@ -14,6 +14,11 @@ vector in each pair. readout="mean" swaps in plain global mean pooling for the a
 
 Classifier: per-layer pooled vectors of both drugs, concatenated in (Drug1, Drug2)
 order since many DDI types are directional, then an MLP to 86 logits.
+
+Fingerprint fusion (fp_dim > 0): each drug's Morgan fingerprint (the RF baseline's
+input, stored on the graph as `fp`) goes through a shared dropout + linear encoder and
+is concatenated with the graph vectors before the classifier, so substructure bits that
+transfer to unseen drugs are available alongside the learned graph representation.
 """
 import torch
 import torch.nn.functional as F
@@ -91,12 +96,15 @@ class DDIModel(nn.Module):
         readout: str = "coattn",
         dropout: float = 0.2,
         gnn_dropout: float = 0.0,
+        fp_dim: int = 0,
+        fp_hidden: int = 256,
     ):
         super().__init__()
         assert readout in {"coattn", "mean"}
         self.readout = readout
         self.inter = inter
         self.gnn_dropout = gnn_dropout
+        self.fp_dim = fp_dim
         self.input_norm = LayerNorm(ATOM_DIM)
         self.cells = nn.ModuleList(
             Cell(ATOM_DIM if i == 0 else hidden, hidden, heads, inter) for i in range(n_layers)
@@ -104,8 +112,10 @@ class DDIModel(nn.Module):
         self.norms = nn.ModuleList(LayerNorm(hidden) for _ in range(n_layers))
         if readout == "coattn":
             self.pools = nn.ModuleList(CoAttentionPool(hidden) for _ in range(n_layers))
+        if fp_dim:
+            self.fp_encoder = nn.Sequential(nn.Dropout(dropout), nn.Linear(fp_dim, fp_hidden), nn.ELU())
         self.classifier = nn.Sequential(
-            nn.Linear(2 * n_layers * hidden, 512),
+            nn.Linear(2 * n_layers * hidden + (2 * fp_hidden if fp_dim else 0), 512),
             nn.ELU(),
             nn.Dropout(dropout),
             nn.Linear(512, n_classes),
@@ -136,6 +146,9 @@ class DDIModel(nn.Module):
                 attn_a.append(al_a)
                 attn_b.append(al_b)
 
+        if self.fp_dim:
+            reps_a.append(self.fp_encoder(a.fp))
+            reps_b.append(self.fp_encoder(b.fp))
         logits = self.classifier(torch.cat(reps_a + reps_b, dim=1))
         if return_attention:
             return logits, attn_a, attn_b

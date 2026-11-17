@@ -10,7 +10,11 @@ encoder with cross-drug graph attention, plus partner-conditioned co-attention p
 three increasingly strict evaluation protocols.
 
 **Status:** data preparation, evaluation splits and baselines are complete. The GNN is
-implemented and trained on S1; model screening is in progress (see [Results](#results)).
+implemented, and screening on the cold-start S1 split has selected a 4-layer encoder with
+fingerprint fusion. It beats the Random Forest baseline as trained (+0.032 Macro-F1 on all
+three seeds) but is level with that baseline once the baseline is given the same
+validation-tuned prior adjustment, so S1 is parity. The full S1/S2/transductive runs and
+ablations are next (see [Results](#results)).
 
 ## Dataset
 
@@ -41,9 +45,18 @@ in code for pair and drug leakage ([`results/split_stats.csv`](results/split_sta
 | S2 | Exactly one drug unseen in training | 5 |
 | S1 | Two drugs both unseen in training (cold start) | 5 |
 
-**Primary metric: Macro-F1** (every interaction type weighted equally); accuracy and
-Micro-F1 are also reported. Models and epochs are chosen on validation Macro-F1 only; the
-test set is evaluated once per run.
+**Primary metric: `macro_f1_occurring`** — Macro-F1 averaged over the interaction types
+present in the evaluation set, so every type counts equally and the divisor is fixed by the
+data. `macro_f1_all86` (all 86 types) and accuracy / Micro-F1 are reported alongside.
+
+A third column, `macro_f1`, uses sklearn's default label set (types in `y_true` **or**
+`y_pred`). It is kept so earlier runs stay readable but is **not comparable between
+models**: a model that predicts fewer rare types deletes its own zero-F1 entries and scores
+higher without classifying anything better. That is not hypothetical — it produced a
+spurious +0.021 before being caught, which is why the primary metric changed
+([`results/logit_adjustment.md`](results/logit_adjustment.md)).
+
+Models and epochs are chosen on validation only; the test set is evaluated once per run.
 
 ## Model
 
@@ -68,7 +81,9 @@ Drug1 graph ─┐                                              ┌─ Drug2 gra
 
 ## Results
 
-Baselines, test Macro-F1 (mean ± std over seeds; [`results/baseline_summary.csv`](results/baseline_summary.csv)):
+Baselines, test Macro-F1 (mean ± std over seeds; [`results/baseline_summary.csv`](results/baseline_summary.csv)).
+These are in the old `macro_f1` column — re-running `src/baselines.py` refits every forest
+and refills them under the primary metric:
 
 | Model | Transductive | S2 | S1 |
 |---|---|---|---|
@@ -78,17 +93,52 @@ Baselines, test Macro-F1 (mean ± std over seeds; [`results/baseline_summary.csv
 GNN screening on S1, seeds 0–2 ([`results/gnn_metrics.csv`](results/gnn_metrics.csv),
 per-epoch logs in [`results/runs/`](results/runs/)):
 
-| Model | Val Macro-F1 | Test Macro-F1 |
-|---|---|---|
-| GNN, plain | 0.210 ± 0.013 | 0.199 ± 0.051 |
-| GNN, sqrt class weights + regularization | **0.212 ± 0.016** | **0.235 ± 0.036** |
-| Random Forest (same seeds) | 0.230 | 0.278 |
+| Model | Params | Val Macro-F1 | Test Macro-F1 |
+|---|---|---|---|
+| GNN, 8 layers | 1.54 M | 0.212 ± 0.016 | 0.235 ± 0.036 |
+| GNN, 4 layers | 0.79 M | 0.215 ± 0.005 | 0.242 ± 0.055 |
+| GNN, 8 layers + fingerprint fusion | 2.33 M | **0.258 ± 0.020** | 0.270 ± 0.053 |
+| GNN, 4 layers + fingerprint fusion | 1.57 M | 0.258 ± 0.008 | **0.273 ± 0.040** |
+| Random Forest (same seeds) | — | 0.230 ± 0.014 | 0.278 ± 0.042 |
 
-On S1 the GNN currently trails the fingerprint baseline; validation peaks within a few
-epochs while training loss keeps falling, which points to overfitting on ~1,000 training
-drugs. Next: fingerprint fusion and a 4-layer encoder (round 1b), then the full S1/S2/
-transductive runs, ablations (mean pooling, no cross-drug attention), per-class F1 and
-attention case studies.
+All GNN rows use sqrt class weights and the same regularization (dropout 0.3, AdamW,
+weight decay 1e-2, lr 5e-4); the encoder depth and `--fp` are the only differences. These
+screening numbers are in the old `macro_f1` column, which is consistent across the rows and
+so still valid for *choosing between variants* — selection was by validation anyway. They
+are not the numbers to quote; see the headline comparison below.
+
+Fusing the Morgan fingerprint into the classifier is what closes the cold-start gap, and
+depth is nearly irrelevant next to it (0.235 → 0.242 for 4 layers alone, versus 0.273 with
+fusion). The two fusion variants are indistinguishable on validation (0.2583 vs 0.2579), so
+the 4-layer model is carried forward on grounds independent of the test set: half the
+parameters, ~40% less time per epoch, and a third of the variance across seeds.
+
+### Headline S1 comparison
+
+The selected configuration against the baseline, under the primary metric, S1 test, seeds
+0–2. Only these rows have been rescored so far; `src/rescore.py` and `src/rescore_rf.py`
+refill the rest from saved checkpoints.
+
+| S1 test, seeds 0–2 | Macro-F1 (occurring) | Macro-F1 (all 86) |
+|---|---|---|
+| GNN, 4 layers + fingerprint fusion | **0.320 ± 0.040** | 0.221 ± 0.043 |
+| Morgan fingerprint + Random Forest | 0.289 ± 0.043 | 0.199 ± 0.044 |
+| Random Forest + validation-tuned prior adjustment | **0.322 ± 0.036** | — |
+
+**As trained, the GNN beats the baseline on cold start by 0.032, on all three seeds
+individually** (+0.029, +0.030, +0.036) — the first protocol where it does.
+
+**But the fair comparison is parity.** Investigating prior adjustment for the GNN (where it
+gave nothing) revealed that the same correction helps the *Random Forest* substantially,
+because the GNN's sqrt class weights already correct for imbalance while the RF's
+`predict_proba` argmax does not. Given the same validation-tuned treatment the RF reaches
+0.322 against the GNN's 0.314, i.e. level. The adjusted RF is the honest baseline to beat,
+and it is not beaten yet. Full reasoning in
+[`results/logit_adjustment.md`](results/logit_adjustment.md).
+
+Next: graph augmentation (DropEdge, atom masking) to attack the real bottleneck of ~1,023
+training drugs; a milder class-weighting variant; then the full S1/S2/transductive runs,
+ablations (mean pooling, no cross-drug attention), per-class F1 and attention case studies.
 
 ## Repository layout
 

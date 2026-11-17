@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 checkpoints/
+results/logits/
+*.bak

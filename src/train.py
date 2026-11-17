@@ -20,7 +20,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch_geometric.data import Batch
 
-from baselines import METRICS, scores
+from baselines import CLASSES_0BASED, METRICS, scores
 from features import N_BITS, build_fp_table
 from graphs import load_graphs
 from model import DDIModel
@@ -79,7 +79,7 @@ def evaluate(model, loader, device) -> dict:
     for a, b, y in loader:
         preds.append(model(a.to(device), b.to(device)).argmax(1).cpu())
         labels.append(y)
-    return scores(torch.cat(labels).numpy(), torch.cat(preds).numpy())
+    return scores(torch.cat(labels).numpy(), torch.cat(preds).numpy(), CLASSES_0BASED)
 
 
 def main():

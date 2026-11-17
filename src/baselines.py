@@ -4,11 +4,23 @@ Run for all three eval protocols (and every seed in splits.SEEDS) so results are
 against the same floor the doc calls out: always-predict-Y49 = 32% accuracy, macro-F1
 is primary.
 
-Macro-F1 uses sklearn's default label set: every class that occurs in y_true or
-y_pred for that eval set. Classes absent from both are left out rather than scored 0;
-a class the model predicts but that never occurs scores 0 and counts. Micro-F1 equals
-accuracy for single-label multiclass; it's reported because the results table asks
-for it.
+Three macro-F1 variants are recorded, because the averaging label set turns out to
+matter more than expected:
+
+  macro_f1_occurring  PRIMARY. Averaged over the classes present in y_true for that
+                      eval set. Fixed by the data, so no choice the model makes can
+                      change the divisor.
+  macro_f1_all86      Averaged over all 86 classes. Classes absent from the eval set
+                      score 0 for every model, which deflates the absolute number but
+                      keeps one divisor across splits and seeds.
+  macro_f1            sklearn's default: classes in y_true OR y_pred. Kept so earlier
+                      results stay readable, but NOT comparable between models -- a
+                      model that predicts fewer rare classes removes its own zero-F1
+                      entries and scores higher without classifying anything better.
+                      results/logit_adjustment.md documents where this was found.
+
+Micro-F1 equals accuracy for single-label multiclass; it's reported because the results
+table asks for it.
 """
 import csv
 import time
@@ -25,12 +37,30 @@ from splits import SEEDS, load_data, make_split
 RESULTS = Path(__file__).resolve().parent.parent / "results"
 RESULTS_CSV = RESULTS / "baseline_metrics.csv"
 SUMMARY_CSV = RESULTS / "baseline_summary.csv"
-METRICS = ["acc", "macro_f1", "micro_f1"]
+N_CLASSES = 86
+METRICS = ["acc", "macro_f1_occurring", "macro_f1_all86", "macro_f1", "micro_f1"]
+
+# The label encoding differs by caller: this module scores the raw Y column (1..86),
+# while train.py and adjust.py score the model's 0..85. macro_f1_all86 needs the right
+# one, so callers pass it explicitly rather than letting it be guessed from the data.
+CLASSES_1BASED = np.arange(1, N_CLASSES + 1)
+CLASSES_0BASED = np.arange(N_CLASSES)
 
 
-def scores(y_true, y_pred) -> dict:
+def scores(y_true, y_pred, all_labels) -> dict:
+    """All three macro-F1 variants; see the module docstring for which to report.
+
+    all_labels: the project's full 86-class label set in the caller's encoding, i.e.
+    CLASSES_1BASED when scoring the raw Y column, CLASSES_0BASED for model outputs.
+    """
     return {
         "acc": accuracy_score(y_true, y_pred),
+        "macro_f1_occurring": f1_score(
+            y_true, y_pred, average="macro", labels=np.unique(y_true), zero_division=0
+        ),
+        "macro_f1_all86": f1_score(
+            y_true, y_pred, average="macro", labels=all_labels, zero_division=0
+        ),
         "macro_f1": f1_score(y_true, y_pred, average="macro", zero_division=0),
         "micro_f1": f1_score(y_true, y_pred, average="micro", zero_division=0),
     }
@@ -38,7 +68,10 @@ def scores(y_true, y_pred) -> dict:
 
 def majority_baseline(train, val, test):
     majority = train.Y.mode().iloc[0]
-    return {name: scores(split.Y, np.full(len(split), majority)) for name, split in [("val", val), ("test", test)]}
+    return {
+        name: scores(split.Y, np.full(len(split), majority), CLASSES_1BASED)
+        for name, split in [("val", val), ("test", test)]
+    }
 
 
 def _to_features(split, fp_table):
@@ -57,7 +90,7 @@ def fit_rf(train, fp_table):
 
 def rf_baseline(clf, val, test, fp_table):
     return {
-        name: scores(split.Y, clf.predict(_to_features(split, fp_table)))
+        name: scores(split.Y, clf.predict(_to_features(split, fp_table)), CLASSES_1BASED)
         for name, split in [("val", val), ("test", test)]
     }
 

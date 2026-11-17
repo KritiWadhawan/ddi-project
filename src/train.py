@@ -108,6 +108,10 @@ def main():
     p.add_argument("--gnn-dropout", type=float, default=0.0, help="dropout on node features after each layer")
     p.add_argument("--adamw", action="store_true", help="decoupled weight decay (AdamW) instead of Adam's L2")
     p.add_argument("--fp", action="store_true", help="fuse each drug's Morgan fingerprint into the classifier")
+    p.add_argument("--drop-edge", type=float, default=0.0,
+                   help="fraction of bonds dropped each forward pass while training")
+    p.add_argument("--mask-atom", type=float, default=0.0,
+                   help="fraction of atom feature rows zeroed each forward pass while training")
     args = p.parse_args()
 
     device = torch.device(args.device)
@@ -124,6 +128,8 @@ def main():
         f"lr{args.lr:g}" if args.lr != 1e-3 else "",
         f"wd{args.weight_decay:g}" if args.weight_decay != 5e-4 else "",
         "fp" if args.fp else "",
+        f"de{args.drop_edge:g}" if args.drop_edge else "",
+        f"ma{args.mask_atom:g}" if args.mask_atom else "",
     ]
     run += "".join(f"_{t}" for t in tags if t)
     if args.resume and METRICS_CSV.exists():
@@ -150,6 +156,8 @@ def main():
         readout=args.readout,
         gnn_dropout=args.gnn_dropout,
         fp_dim=N_BITS if args.fp else 0,
+        drop_edge=args.drop_edge,
+        mask_atom=args.mask_atom,
     ).to(device)
     optim = torch.optim.AdamW if args.adamw else torch.optim.Adam
     opt = optim(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)

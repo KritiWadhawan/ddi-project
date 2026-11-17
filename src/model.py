@@ -19,6 +19,14 @@ Fingerprint fusion (fp_dim > 0): each drug's Morgan fingerprint (the RF baseline
 input, stored on the graph as `fp`) goes through a shared dropout + linear encoder and
 is concatenated with the graph vectors before the classifier, so substructure bits that
 transfer to unseen drugs are available alongside the learned graph representation.
+
+Augmentation (drop_edge, mask_atom; training only): S1 trains on ~1,023 distinct drugs,
+and the per-epoch logs show training loss reaching ~0.05 while validation plateaus, so
+the encoder memorises those molecules rather than learning transferable chemistry. Both
+knobs perturb the molecule itself, so a drug is a slightly different graph each epoch:
+drop_edge removes that fraction of bonds (DropEdge, Rong et al., ICLR 2020) and
+mask_atom zeroes that fraction of atom feature rows. The fingerprint is deliberately
+left intact -- it is the part that already transfers.
 """
 import torch
 import torch.nn.functional as F
@@ -46,6 +54,28 @@ def bipartite_edges(ptr_a: torch.Tensor, ptr_b: torch.Tensor) -> torch.Tensor:
     src = ptr_b[pair] + k % n_b[pair]
     dst = ptr_a[pair] + k // n_b[pair]
     return torch.stack([src, dst])
+
+
+def drop_edges(edge_index: torch.Tensor, p: float) -> torch.Tensor:
+    """Keep each edge with probability 1 - p.
+
+    Bonds are stored in both directions, and the two directions are dropped
+    independently, so a bond may survive one way only. That is the usual formulation and
+    it costs nothing here: GCNConv adds self-loops, so an atom left isolated still has a
+    well-defined update.
+    """
+    keep = torch.rand(edge_index.size(1), device=edge_index.device) >= p
+    return edge_index[:, keep]
+
+
+def mask_atoms(x: torch.Tensor, p: float) -> torch.Tensor:
+    """Zero whole atom feature rows with probability p.
+
+    Applied before input_norm, so LayerNorm maps every masked atom to the same learned
+    constant -- in effect a shared mask token the encoder can recognise.
+    """
+    keep = (torch.rand(x.size(0), 1, device=x.device) >= p).to(x.dtype)
+    return x * keep
 
 
 class Cell(nn.Module):
@@ -98,6 +128,8 @@ class DDIModel(nn.Module):
         gnn_dropout: float = 0.0,
         fp_dim: int = 0,
         fp_hidden: int = 256,
+        drop_edge: float = 0.0,
+        mask_atom: float = 0.0,
     ):
         super().__init__()
         assert readout in {"coattn", "mean"}
@@ -105,6 +137,8 @@ class DDIModel(nn.Module):
         self.inter = inter
         self.gnn_dropout = gnn_dropout
         self.fp_dim = fp_dim
+        self.drop_edge = drop_edge
+        self.mask_atom = mask_atom
         self.input_norm = LayerNorm(ATOM_DIM)
         self.cells = nn.ModuleList(
             Cell(ATOM_DIM if i == 0 else hidden, hidden, heads, inter) for i in range(n_layers)
@@ -123,12 +157,21 @@ class DDIModel(nn.Module):
 
     def forward(self, a, b, return_attention: bool = False):
         """a, b: PyG Batches of Drug1 and Drug2 graphs, graph k of each = pair k."""
-        x_a, x_b = self.input_norm(a.x, a.batch), self.input_norm(b.x, b.batch)
+        x_a, x_b = a.x, b.x
+        if self.training and self.mask_atom:
+            x_a, x_b = mask_atoms(x_a, self.mask_atom), mask_atoms(x_b, self.mask_atom)
+        x_a, x_b = self.input_norm(x_a, a.batch), self.input_norm(x_b, b.batch)
+
+        edge_a, edge_b = a.edge_index, b.edge_index
+        if self.training and self.drop_edge:
+            edge_a, edge_b = drop_edges(edge_a, self.drop_edge), drop_edges(edge_b, self.drop_edge)
+        # The cross-drug graph is every atom pair, so it has no bonds to drop; masked
+        # atoms still reach it, carrying the mask token.
         bi_ba = bipartite_edges(a.ptr, b.ptr) if self.inter else None
 
         reps_a, reps_b, attn_a, attn_b = [], [], [], []
         for cell, norm, i in zip(self.cells, self.norms, range(len(self.cells))):
-            x_a, x_b = cell(x_a, x_b, a.edge_index, b.edge_index, bi_ba)
+            x_a, x_b = cell(x_a, x_b, edge_a, edge_b, bi_ba)
             x_a, x_b = F.elu(norm(x_a, a.batch)), F.elu(norm(x_b, b.batch))
             x_a = F.dropout(x_a, self.gnn_dropout, self.training)
             x_b = F.dropout(x_b, self.gnn_dropout, self.training)

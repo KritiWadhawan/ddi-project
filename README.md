@@ -13,8 +13,10 @@ three increasingly strict evaluation protocols.
 implemented, and screening on the cold-start S1 split has selected a 4-layer encoder with
 fingerprint fusion. It beats the Random Forest baseline as trained (+0.032 Macro-F1 on all
 three seeds) but is level with that baseline once the baseline is given the same
-validation-tuned prior adjustment, so S1 is parity. The full S1/S2/transductive runs and
-ablations are next (see [Results](#results)).
+validation-tuned prior adjustment, so S1 is parity. Graph augmentation was then tested
+against the cold-start bottleneck and did not help, which located that bottleneck in drug
+coverage rather than overfitting. The full S1/S2/transductive runs and ablations are next
+(see [Results](#results)).
 
 ## Dataset
 
@@ -136,9 +138,24 @@ because the GNN's sqrt class weights already correct for imbalance while the RF'
 and it is not beaten yet. Full reasoning in
 [`results/logit_adjustment.md`](results/logit_adjustment.md).
 
-Next: graph augmentation (DropEdge, atom masking) to attack the real bottleneck of ~1,023
-training drugs; a milder class-weighting variant; then the full S1/S2/transductive runs,
-ablations (mean pooling, no cross-drug attention), per-class F1 and attention case studies.
+### Graph augmentation: a negative result that locates the bottleneck
+
+DropEdge (20% of bonds) and atom-feature masking (15% of atoms) were added to test whether
+the cold-start ceiling comes from the encoder memorising its ~1,023 training drugs. Both
+cut memorisation substantially — final training loss rose from 0.040 to ~0.12 on seed 0 —
+and validation did not move; all four variants of the round, including one with class
+weighting removed, lost on S1 test on all three seeds.
+
+The combination is the result: the intervention worked on the training side and bought
+nothing on the evaluation side, so what limits S1 is how few distinct drugs the split
+leaves to train on, not overfitting to them. On S1 both drugs of a test pair are unseen,
+and the fingerprint — not the learned graph representation — is what transfers. Details in
+[`results/round1c_augmentation.md`](results/round1c_augmentation.md), which also covers a
+correction it turned up: checkpoint selection had been early-stopping on the old
+`macro_f1` rather than the reported metric, and now uses `macro_f1_occurring`.
+
+Next: the full S1/S2/transductive runs, ablations (mean pooling, no cross-drug attention),
+per-class F1 and attention case studies.
 
 ## Repository layout
 

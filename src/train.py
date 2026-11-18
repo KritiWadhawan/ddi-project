@@ -31,6 +31,11 @@ CHECKPOINTS = ROOT / "checkpoints"
 RUNS = ROOT / "results" / "runs"
 METRICS_CSV = ROOT / "results" / "gnn_metrics.csv"
 N_CLASSES = 86
+# Checkpoint selection and early stopping run on the metric the project reports.
+# They used to run on "macro_f1" (sklearn's default label set), which rewards a model
+# for predicting fewer rare classes -- so it favoured conservative checkpoints and, on
+# 2 of the 12 round-1c runs, stopped training while the primary metric was still rising.
+SELECT = "macro_f1_occurring"
 
 
 def set_seed(seed: int) -> None:
@@ -194,7 +199,7 @@ def main():
         torch.set_rng_state(state["torch_rng"])
         log_rows, best_f1, best_epoch = state["log_rows"], state["best_f1"], state["best_epoch"]
         start_epoch = state["epoch"] + 1
-        print(f"resumed after epoch {state['epoch']} (best val macro-F1 {best_f1:.3f} at epoch {best_epoch})")
+        print(f"resumed after epoch {state['epoch']} (best val {SELECT} {best_f1:.3f} at epoch {best_epoch})")
 
     for epoch in range(start_epoch, args.epochs + 1):
         if epoch - best_epoch > args.patience:
@@ -217,13 +222,13 @@ def main():
             {"epoch": epoch, "loss": total_loss / n_batches, **{f"val_{k}": v for k, v in val_m.items()},
              "train_s": round(train_time, 1), "total_s": round(time.time() - t0, 1)}
         )
-        improved = val_m["macro_f1"] > best_f1
+        improved = val_m[SELECT] > best_f1
         if improved:
-            best_f1, best_epoch = val_m["macro_f1"], epoch
+            best_f1, best_epoch = val_m[SELECT], epoch
             torch.save({"model": model.state_dict(), "args": vars(args), "epoch": epoch}, ckpt)
         print(
             f"epoch {epoch:3d} loss={total_loss / n_batches:.4f} val_acc={val_m['acc']:.3f} "
-            f"val_macro_f1={val_m['macro_f1']:.3f}{' *' if improved else ''} "
+            f"val_{SELECT}={val_m[SELECT]:.3f}{' *' if improved else ''} "
             f"({train_time:.0f}s train, {time.time() - t0:.0f}s total)",
             flush=True,
         )
@@ -238,7 +243,7 @@ def main():
             last_ckpt,
         )
         if epoch - best_epoch >= args.patience:
-            print(f"early stop: no val macro-F1 gain for {args.patience} epochs")
+            print(f"early stop: no val {SELECT} gain for {args.patience} epochs")
             break
 
     model.load_state_dict(torch.load(ckpt, map_location=device)["model"])

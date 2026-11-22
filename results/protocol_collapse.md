@@ -75,19 +75,30 @@ being made about the protocol.
 The +0.044 above is against the Random Forest as trained. The honest baseline is the RF
 with its own validation-tuned prior adjustment, which is a real gain for the RF and gave
 the GNN nothing — the asymmetry is explained in
-[logit_adjustment.md](logit_adjustment.md). On the three seeds where that bar exists:
+[logit_adjustment.md](logit_adjustment.md). Over all five seeds:
 
-| S1 test, seeds 0–2 | Macro-F1 (occurring) |
+| S1 test, 5 seeds | Macro-F1 (occurring) |
 |---|---|
-| GNN, 4 layers + fingerprint fusion | 0.327 ± 0.046 |
-| RF + Morgan, as trained | 0.289 ± 0.043 |
-| RF + Morgan + validation-tuned prior adjustment (τ = 0.15) | **0.322 ± 0.035** |
+| GNN, 4 layers + fingerprint fusion | 0.3138 ± 0.0425 |
+| RF + Morgan, as trained | 0.2696 ± 0.0433 |
+| RF + Morgan + validation-tuned prior adjustment (τ = 0.15) | **0.3148 ± 0.0277** |
 
-+0.006, winning 2 of 3 seeds: parity, unchanged from earlier rounds. **Known gap:** the
-GNN has 5 seeds on S1 and the adjusted baseline only 3, because `src/adjust_rf.py` has no
-cached probabilities for seeds 3–4. Seeds 3 and 4 are where the unadjusted forest did
-worst, so completing the bar could move the comparison either way, and the 5-seed S1
-figure should not be quoted against the 3-seed bar until it is.
+| per seed | 0 | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|---|
+| GNN | 0.3607 | 0.3462 | 0.2754 | 0.3221 | 0.2645 |
+| adjusted RF | 0.3410 | 0.3430 | 0.2806 | 0.3152 | 0.2943 |
+| difference | +0.0197 | +0.0032 | −0.0052 | +0.0068 | −0.0299 |
+
+**−0.0011 ± 0.0184, the GNN ahead on 3 seeds of 5.** This is parity in the strict sense:
+the difference between the means is 0.001 while the per-seed differences range over
+0.05, so the two models are indistinguishable on S1 and neither can be said to lead. The
+adjusted RF additionally has the lower variance across seeds (±0.028 vs ±0.043), so the
+GNN is not even the more *reliable* of the two in this regime.
+
+One shared τ is selected on validation across all five seeds, not one per seed. Doing so
+returns τ = 0.15, the same value three seeds had chosen, so the extension leaves the
+previously reported seeds 0–2 figures (GNN 0.3274, adjusted RF 0.3215) exactly as they
+were — a small robustness check on the selection that came for free.
 
 Prior adjustment has also not been extended to S2 or transductive. Neither model receives
 it there, which is symmetric and therefore fair, but it does mean the S2 comparison is not
@@ -202,6 +213,7 @@ so "no measurable effect here" is not "no effect anywhere". Establishing either 
 as genuinely useless would need several seeds, most usefully on S2, where the GNN's
 deficit actually lives.
 
-Outstanding elsewhere: the adjusted-RF bar on S1 seeds 3–4 (the headline S1 figure has 5
-seeds against a 3-seed bar), and whether prior adjustment should be extended to S2 and
-transductive for both models.
+Outstanding elsewhere: whether prior adjustment should be extended to S2 and transductive
+for both models. Neither receives it there, which is symmetric and so fair, but the RF
+gained +0.045 from it on S1, and a reviewer may ask why the baseline was given its best
+form in only one regime of three.

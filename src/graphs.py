@@ -14,7 +14,11 @@ DGL-LifeSci's CanonicalBondFeaturizer: bond type one-hot (4), conjugated, in rin
 stereo one-hot (6). Edges are stored in both directions with matching edge_attr.
 
 Atom order in each graph is RDKit's atom order for the stored SMILES, so attention
-weights can be mapped back onto the molecule for the Phase 4 case studies.
+weights could in principle be mapped back onto the molecule. The attention case studies
+that motivated keeping that correspondence have since been dropped: the co-attention
+pooling has no measurable effect on performance once variants are compared at an equal
+epoch budget (results/protocol_collapse.md), so reading its weights as learned chemistry
+would not be supportable.
 
 Run after clean.py: python src/graphs.py
 """

@@ -71,6 +71,19 @@ chosen on mean validation Macro-F1, test read once.
 The RF behaves oppositely to the GNN. Its optimum is **positive** (`tau = +0.15`), and its
 gain **survives the fixed label set**, so it is real and not a divisor effect:
 
+> **Later extension.** This section's figures are seeds 0–2, the seeds available when the
+> experiment was run. The adjusted bar was afterwards extended to all five S1 seeds:
+> selecting one shared `tau` across five seeds returns **the same `tau = 0.15`**, so
+> nothing below changes, and the five-seed bar is **0.3148 ± 0.0277** against the GNN's
+> **0.3138 ± 0.0425** — parity, the GNN ahead on 3 seeds of 5
+> ([protocol_collapse.md](protocol_collapse.md)).
+>
+> The GNN figure below (0.3202) is the round-1b checkpoint, which is what this experiment's
+> cached logits came from. That run was later superseded by a re-run under the corrected
+> checkpoint-selection rule, scoring 0.3274 on the same three seeds. The conclusion here —
+> that prior adjustment does nothing for the GNN and genuinely helps the RF — is unaffected,
+> but do not quote 0.3202 as the model's S1 result.
+
 | S1 test, seeds 0–2 | `tau = 0` | at its own `tau*` | Change |
 |---|---|---|---|
 | GNN L4+fp (`tau* = -0.25` default / `+0.05` occurring) | 0.3202 | 0.3143 | **−0.006** |

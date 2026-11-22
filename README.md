@@ -21,6 +21,10 @@ epoch budget find no measurable contribution from either distinctive architectur
 component, which points the same way. Remaining: per-class F1 against class frequency, and
 the write-up.
 
+Picking this up for the analysis and write-up? Start with
+[`HANDOVER.md`](HANDOVER.md) — what exists, what is still open, and what the results do
+not support.
+
 ## Dataset
 
 [TDC DrugBank DDI](https://tdcommons.ai/multi_pred_tasks/ddi/) (Harvard Dataverse file 4139573):
@@ -108,8 +112,8 @@ pairs co-occur — it sees two bit vectors — so its decline measures how much 
 becomes; the GNN's steeper decline is the part of its lead that was never chemistry.
 
 Two caveats that belong next to the table. On S1 the +0.044 is against the RF *as trained*;
-against the RF with its own validation-tuned prior adjustment it is +0.006, i.e. parity
-(seeds 0–2 only — see below). And in both cold-start regimes the RF is the *more accurate*
+against the RF with its own validation-tuned prior adjustment it is −0.001 over the same
+five seeds, i.e. parity (below). And in both cold-start regimes the RF is the *more accurate*
 model (S1 0.465 vs 0.444, S2 0.726 vs 0.695), the sqrt class weighting trading head-class
 accuracy for tail recall.
 
@@ -145,23 +149,24 @@ parameters, ~40% less time per epoch, and a third of the variance across seeds.
 
 ### Why S1 is parity rather than a win
 
-| S1 test, seeds 0–2 | Macro-F1 (occurring) |
+| S1 test, 5 seeds | Macro-F1 (occurring) |
 |---|---|
-| GNN, 4 layers + fingerprint fusion | 0.327 ± 0.046 |
-| Morgan fingerprint + Random Forest, as trained | 0.289 ± 0.043 |
-| Random Forest + validation-tuned prior adjustment (τ = 0.15) | **0.322 ± 0.035** |
+| GNN, 4 layers + fingerprint fusion | 0.3138 ± 0.0425 |
+| Morgan fingerprint + Random Forest, as trained | 0.2696 ± 0.0433 |
+| Random Forest + validation-tuned prior adjustment (τ = 0.15) | **0.3148 ± 0.0277** |
 
 Investigating prior adjustment for the GNN (where it gave nothing) revealed that the same
 correction helps the *Random Forest* substantially, because the GNN's sqrt class weights
 already correct for imbalance while the RF's `predict_proba` argmax does not. Given the
-same validation-tuned treatment the RF reaches 0.322 against the GNN's 0.327: +0.006,
-winning 2 of 3 seeds. The adjusted RF is the honest baseline, and it is not beaten. Full
-reasoning in [`results/logit_adjustment.md`](results/logit_adjustment.md).
+same validation-tuned treatment the RF reaches 0.3148 against the GNN's 0.3138:
+**−0.0011, with the GNN ahead on 3 seeds of 5** and a per-seed spread of ±0.018 that
+dwarfs the difference between the means. S1 is parity in the strict sense — not a narrow
+win for either model. The adjusted RF also has the lower seed-to-seed variance of the two.
+Full reasoning in [`results/logit_adjustment.md`](results/logit_adjustment.md).
 
-**Known gap:** the GNN has 5 seeds on S1 and this bar only 3, because `src/adjust_rf.py`
-has no cached probabilities for seeds 3–4. Those are the seeds where the unadjusted forest
-did worst, so completing the bar could move the comparison either way; the 5-seed figure in
-the headline table should not be read against this 3-seed bar until it is.
+One shared τ is chosen on validation across all five seeds, not one per seed. Selecting it
+over five seeds returns the same τ = 0.15 that three seeds did, so the earlier three-seed
+figures are unchanged by the extension.
 
 ### Architecture ablations
 

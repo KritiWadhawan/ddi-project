@@ -4,19 +4,21 @@ Given two drugs, predict which of **86 DrugBank interaction types** occurs betwe
 (for example, one drug increasing the metabolism of the other), with a focus on
 **drugs the model has never seen during training**, the realistic case for new drugs.
 
-The model is a graph neural network over molecular graphs: AutoDDI's searched 8-layer
-encoder with cross-drug graph attention, plus partner-conditioned co-attention pooling
-(after MGDDI). It is compared against a Morgan fingerprint + Random Forest baseline under
-three increasingly strict evaluation protocols.
+The model is a graph neural network over molecular graphs: AutoDDI's searched encoder with
+cross-drug graph attention, plus partner-conditioned co-attention pooling (after MGDDI);
+the selected configuration uses 4 of those layers and fuses each drug's Morgan fingerprint
+into the classifier. It is compared against a Morgan fingerprint + Random Forest baseline
+under three increasingly strict evaluation protocols.
 
-**Status:** data preparation, evaluation splits and baselines are complete. The GNN is
-implemented, and screening on the cold-start S1 split has selected a 4-layer encoder with
-fingerprint fusion. It beats the Random Forest baseline as trained (+0.032 Macro-F1 on all
-three seeds) but is level with that baseline once the baseline is given the same
-validation-tuned prior adjustment, so S1 is parity. Graph augmentation was then tested
-against the cold-start bottleneck and did not help, which located that bottleneck in drug
-coverage rather than overfitting. The full S1/S2/transductive runs and ablations are next
-(see [Results](#results)).
+**Status:** data preparation, splits, baselines and the full three-protocol comparison are
+complete. The headline finding is that **the GNN's advantage collapses as soon as a drug is
+unseen**: it beats the Random Forest by 0.142 Macro-F1 when both drugs of a test pair were
+seen in training, loses by 0.009 when one is unseen, and is level when both are. Unseeing a
+single drug costs the GNN 38% of its transductive score and the fingerprint forest only
+26%, so the advantage is memorised drug identity rather than transferable chemistry
+([`results/protocol_collapse.md`](results/protocol_collapse.md)). Architecture ablations
+are being re-run at a matched epoch budget; the first attempt was confounded by training
+length. Remaining: per-class F1 against class frequency, and the write-up.
 
 ## Dataset
 
@@ -79,18 +81,43 @@ Drug1 graph ─┐                                              ┌─ Drug2 gra
 - Order is kept ([Drug1 ‖ Drug2]) because many interaction types are directional.
 - Optional `--fp`: each drug's Morgan fingerprint is encoded and fused into the classifier.
 - Training: Adam/AdamW, optional class weighting (`balanced` or `sqrt`), early stopping
-  (patience 10) on validation Macro-F1, a checkpoint every epoch so runs can resume.
+  (patience 10) on validation `macro_f1_occurring`, a checkpoint every epoch so runs can
+  resume. Note that best-epoch selection is a maximum over however many epochs a run
+  survives, which on a noisy validation plateau favours whichever run trained longest —
+  worth ~0.01 here, so variants meant to be compared are trained to a fixed budget.
 
 ## Results
 
-Baselines, test Macro-F1 (mean ± std over seeds; [`results/baseline_summary.csv`](results/baseline_summary.csv)).
-These are in the old `macro_f1` column — re-running `src/baselines.py` refits every forest
-and refills them under the primary metric:
+### Headline: the protocol decides the result
+
+Test `macro_f1_occurring`, selected configuration (4-layer encoder + fingerprint fusion,
+sqrt class weights) against the baselines. Full analysis, including the leakage check on
+the transductive number, in [`results/protocol_collapse.md`](results/protocol_collapse.md).
+
+| Protocol | Test pairs contain | GNN | RF + Morgan | Majority | GNN keeps |
+|---|---|---|---|---|---|
+| Transductive | both drugs usually seen | **0.950** | 0.808 | 0.006 | 100% |
+| S2 | exactly one drug unseen | 0.585 ± 0.009 | **0.594 ± 0.013** | 0.006 ± 0.000 | 61.5% |
+| S1 | both drugs unseen | **0.314 ± 0.043** | 0.270 ± 0.043 | 0.009 ± 0.001 | 33.0% |
+
+The last column is the finding: the RF keeps 73.5% of its own transductive score on S2
+against the GNN's 61.5%, so **the GNN degrades faster than the baseline** at the first step
+away from the protocol it looks best under. A fingerprint forest cannot memorise which
+pairs co-occur — it sees two bit vectors — so its decline measures how much harder the task
+becomes; the GNN's steeper decline is the part of its lead that was never chemistry.
+
+Two caveats that belong next to the table. On S1 the +0.044 is against the RF *as trained*;
+against the RF with its own validation-tuned prior adjustment it is +0.006, i.e. parity
+(seeds 0–2 only — see below). And in both cold-start regimes the RF is the *more accurate*
+model (S1 0.465 vs 0.444, S2 0.726 vs 0.695), the sqrt class weighting trading head-class
+accuracy for tail recall.
+
+Baselines in full, test Macro-F1 ([`results/baseline_summary.csv`](results/baseline_summary.csv)):
 
 | Model | Transductive | S2 | S1 |
 |---|---|---|---|
 | Majority class | 0.006 | 0.006 ± 0.000 | 0.009 ± 0.001 |
-| Morgan fingerprint + Random Forest | 0.799 | 0.585 ± 0.019 | 0.260 ± 0.044 |
+| Morgan fingerprint + Random Forest | 0.808 | 0.594 ± 0.013 | 0.270 ± 0.043 |
 
 GNN screening on S1, seeds 0–2 ([`results/gnn_metrics.csv`](results/gnn_metrics.csv),
 per-epoch logs in [`results/runs/`](results/runs/)):
@@ -107,7 +134,7 @@ All GNN rows use sqrt class weights and the same regularization (dropout 0.3, Ad
 weight decay 1e-2, lr 5e-4); the encoder depth and `--fp` are the only differences. These
 screening numbers are in the old `macro_f1` column, which is consistent across the rows and
 so still valid for *choosing between variants* — selection was by validation anyway. They
-are not the numbers to quote; see the headline comparison below.
+are not the numbers to quote; the headline table above is.
 
 Fusing the Morgan fingerprint into the classifier is what closes the cold-start gap, and
 depth is nearly irrelevant next to it (0.235 → 0.242 for 4 layers alone, versus 0.273 with
@@ -115,28 +142,42 @@ fusion). The two fusion variants are indistinguishable on validation (0.2583 vs 
 the 4-layer model is carried forward on grounds independent of the test set: half the
 parameters, ~40% less time per epoch, and a third of the variance across seeds.
 
-### Headline S1 comparison
+### Why S1 is parity rather than a win
 
-The selected configuration against the baseline, under the primary metric, S1 test, seeds
-0–2. Only these rows have been rescored so far; `src/rescore.py` and `src/rescore_rf.py`
-refill the rest from saved checkpoints.
+| S1 test, seeds 0–2 | Macro-F1 (occurring) |
+|---|---|
+| GNN, 4 layers + fingerprint fusion | 0.327 ± 0.046 |
+| Morgan fingerprint + Random Forest, as trained | 0.289 ± 0.043 |
+| Random Forest + validation-tuned prior adjustment (τ = 0.15) | **0.322 ± 0.035** |
 
-| S1 test, seeds 0–2 | Macro-F1 (occurring) | Macro-F1 (all 86) |
-|---|---|---|
-| GNN, 4 layers + fingerprint fusion | **0.320 ± 0.040** | 0.221 ± 0.043 |
-| Morgan fingerprint + Random Forest | 0.289 ± 0.043 | 0.199 ± 0.044 |
-| Random Forest + validation-tuned prior adjustment | **0.322 ± 0.036** | — |
+Investigating prior adjustment for the GNN (where it gave nothing) revealed that the same
+correction helps the *Random Forest* substantially, because the GNN's sqrt class weights
+already correct for imbalance while the RF's `predict_proba` argmax does not. Given the
+same validation-tuned treatment the RF reaches 0.322 against the GNN's 0.327: +0.006,
+winning 2 of 3 seeds. The adjusted RF is the honest baseline, and it is not beaten. Full
+reasoning in [`results/logit_adjustment.md`](results/logit_adjustment.md).
 
-**As trained, the GNN beats the baseline on cold start by 0.032, on all three seeds
-individually** (+0.029, +0.030, +0.036) — the first protocol where it does.
+**Known gap:** the GNN has 5 seeds on S1 and this bar only 3, because `src/adjust_rf.py`
+has no cached probabilities for seeds 3–4. Those are the seeds where the unadjusted forest
+did worst, so completing the bar could move the comparison either way; the 5-seed figure in
+the headline table should not be read against this 3-seed bar until it is.
 
-**But the fair comparison is parity.** Investigating prior adjustment for the GNN (where it
-gave nothing) revealed that the same correction helps the *Random Forest* substantially,
-because the GNN's sqrt class weights already correct for imbalance while the RF's
-`predict_proba` argmax does not. Given the same validation-tuned treatment the RF reaches
-0.322 against the GNN's 0.314, i.e. level. The adjusted RF is the honest baseline to beat,
-and it is not beaten yet. Full reasoning in
-[`results/logit_adjustment.md`](results/logit_adjustment.md).
+### Architecture ablations
+
+Removing the per-layer co-attention pooling (mean pooling instead) or the bipartite
+cross-drug GATConv changes transductive validation by between 0.001 and 0.005 once the
+variants are compared at an equal epoch budget — the bipartite layer is a null on every
+estimator. The first run of this comparison appeared to show a clear +0.013 for
+co-attention, but that gap was training length: best-epoch validation is a maximum over
+however many epochs a run survived, and early stopping gave the full model 29 more epochs
+than mean pooling to draw it from. Details and the corrected estimators in
+[`results/protocol_collapse.md`](results/protocol_collapse.md).
+
+This supports the headline rather than denting it: if neither distinctive component is
+identifiable and the model still reaches 0.950 transductive, that score is a property of
+the protocol, not the architecture. It is also why attention case studies were dropped from
+the planned analysis — presenting the weights of a component with no measurable effect as
+learned chemistry would be contradicted by this project's own ablation table.
 
 ### Graph augmentation: a negative result that locates the bottleneck
 
@@ -151,11 +192,13 @@ nothing on the evaluation side, so what limits S1 is how few distinct drugs the 
 leaves to train on, not overfitting to them. On S1 both drugs of a test pair are unseen,
 and the fingerprint — not the learned graph representation — is what transfers. Details in
 [`results/round1c_augmentation.md`](results/round1c_augmentation.md), which also covers a
-correction it turned up: checkpoint selection had been early-stopping on the old
-`macro_f1` rather than the reported metric, and now uses `macro_f1_occurring`.
+correction it turned up: checkpoint selection had been early-stopping on the old `macro_f1`
+rather than the reported metric, and now uses `macro_f1_occurring`. Re-running under the
+new rule showed it is a wash on the numbers (−0.003 validation, +0.007 test) — it is kept
+because selecting on the metric you report is a requirement, not because it scores better.
 
-Next: the full S1/S2/transductive runs, ablations (mean pooling, no cross-drug attention),
-per-class F1 and attention case studies.
+Next: per-class F1 against each class's training frequency, the matched-budget ablation
+re-run, and the write-up.
 
 ## Repository layout
 

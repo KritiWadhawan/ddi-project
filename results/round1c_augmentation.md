@@ -85,18 +85,44 @@ Round 1c's per-epoch logs are the first to record `val_macro_f1_occurring` every
 which made it possible to ask — without retraining — what the training loop's early
 stopping would have done had it used the reported metric instead of the old `macro_f1`.
 
-Across the 12 runs it would have kept a different epoch in **7**, worth +0.004 validation
-on average (max +0.019). More importantly, 2 runs had been stopped while the primary metric
-was still rising: `S1_seed1 … fp_de0.2` peaked at epoch 29 of 30, and `S1_seed2 … fp` with
-no class weights peaked at epoch 20 of 20. Selecting on a metric other than the reported
-one also carries a known bias — the old `macro_f1` rewards predicting fewer rare classes,
-so it favours conservative checkpoints.
+Across the 12 runs it would have kept a different epoch in **7**, and 2 runs had been
+stopped while the primary metric was still rising: `S1_seed1 … fp_de0.2` peaked at epoch 29
+of 30, and `S1_seed2 … fp` with no class weights peaked at epoch 20 of 20. Selecting on a
+metric other than the reported one also carries a known bias — the old `macro_f1` rewards
+predicting fewer rare classes, so it favours conservative checkpoints.
 
-`src/train.py` now early-stops and checkpoints on `macro_f1_occurring`. The round-1 screening
-rounds were internally consistent under the old rule, which is all a screening comparison
-needs, so they were not re-run; S1 seeds 0–2 of the selected configuration *are* re-run in
-round 2 so that every reported seed is selected the same way. Their superseded rows and
-checkpoints are archived, not deleted (`results/gnn_metrics_superseded.csv`, `*.round1b`).
+`src/train.py` now early-stops and checkpoints on `macro_f1_occurring`. The round-1
+screening rounds were internally consistent under the old rule, which is all a screening
+comparison needs, so they were not re-run; S1 seeds 0–2 of the selected configuration *are*
+re-run in round 2 so that every reported seed is selected the same way. Their superseded
+rows and checkpoints are archived, not deleted (`results/gnn_metrics_superseded.csv`,
+`*.round1b`).
+
+### Correction: the change is right on principle, but it is not a gain
+
+An earlier version of this section reported the retrospective re-pick above as worth
+"+0.004 validation on average (max +0.019)" and presented that as the benefit of the
+change. Re-running S1 seeds 0–2 under the new rule in round 2 showed otherwise:
+
+| S1 seeds 0–2, selected configuration | val | test |
+|---|---|---|
+| old rule (select on `macro_f1`) | 0.3004 | 0.3202 |
+| new rule (select on `macro_f1_occurring`) | 0.2976 | 0.3274 |
+
+−0.003 validation and +0.007 test: a wash. On seed 0 the new rule *cost* 0.012 validation,
+because early stopping on the noisier `occurring` curve fired at epoch 27 and the run never
+reached the epoch-37 region where the old rule had found its peak.
+
+The two claims are not in conflict — they answer different questions. Re-picking the best
+epoch inside a fixed set of logs is not the same experiment as re-training with early
+stopping driven by a different signal, and GPU training is not bit-reproducible, so the two
+runs' curves diverge from the first epoch regardless. The mechanism was identified in the
+round-3 ablations: best-epoch validation is a maximum over however many epochs a run
+survived, and on a noisy plateau that is worth roughly 0.01 on its own, favouring whichever
+run trained longest ([protocol_collapse.md](protocol_collapse.md)).
+
+The rule change stands, because selecting on the metric you report is a requirement rather
+than an optimisation. It should not be described as an improvement to the numbers.
 
 ## Status
 

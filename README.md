@@ -16,9 +16,10 @@ unseen**: it beats the Random Forest by 0.142 Macro-F1 when both drugs of a test
 seen in training, loses by 0.009 when one is unseen, and is level when both are. Unseeing a
 single drug costs the GNN 38% of its transductive score and the fingerprint forest only
 26%, so the advantage is memorised drug identity rather than transferable chemistry
-([`results/protocol_collapse.md`](results/protocol_collapse.md)). Architecture ablations
-are being re-run at a matched epoch budget; the first attempt was confounded by training
-length. Remaining: per-class F1 against class frequency, and the write-up.
+([`results/protocol_collapse.md`](results/protocol_collapse.md)). Ablations at a matched
+epoch budget find no measurable contribution from either distinctive architectural
+component, which points the same way. Remaining: per-class F1 against class frequency, and
+the write-up.
 
 ## Dataset
 
@@ -164,20 +165,33 @@ the headline table should not be read against this 3-seed bar until it is.
 
 ### Architecture ablations
 
-Removing the per-layer co-attention pooling (mean pooling instead) or the bipartite
-cross-drug GATConv changes transductive validation by between 0.001 and 0.005 once the
-variants are compared at an equal epoch budget — the bipartite layer is a null on every
-estimator. The first run of this comparison appeared to show a clear +0.013 for
-co-attention, but that gap was training length: best-epoch validation is a maximum over
-however many epochs a run survived, and early stopping gave the full model 29 more epochs
-than mean pooling to draw it from. Details and the corrected estimators in
+Trained to a fixed 63 epochs each, transductive validation `macro_f1_occurring`:
+
+| transductive, seed 0, N = 63 | best val | test |
+|---|---|---|
+| full (co-attention + bipartite cross-drug GATConv) | 0.9518 | 0.9505 |
+| mean pooling instead of co-attention | 0.9488 (−0.0031) | 0.9501 (−0.0004) |
+| no bipartite cross-drug GATConv | 0.9488 (−0.0031) | 0.9413 (−0.0092) |
+
+**Neither distinctive component has a measurable effect.** The largest difference is 0.0031
+against a validation plateau whose standard deviation is 0.0078, and removing the bipartite
+layer leaves a model that beats the full one on 34 of 63 matched epochs. That cross-drug
+message passing contributes nothing is worth stating plainly, since it is the defining idea
+in this architecture family.
+
+An earlier version of this comparison appeared to show a clear +0.013 for co-attention.
+That gap was training length, not architecture: best-epoch validation is a maximum over
+however many epochs a run survived, and early stopping had given the full model 29 more
+epochs than mean pooling to draw it from. Fixing the budget removed three-quarters of it.
+Details and all four estimators in
 [`results/protocol_collapse.md`](results/protocol_collapse.md).
 
 This supports the headline rather than denting it: if neither distinctive component is
 identifiable and the model still reaches 0.950 transductive, that score is a property of
 the protocol, not the architecture. It is also why attention case studies were dropped from
 the planned analysis — presenting the weights of a component with no measurable effect as
-learned chemistry would be contradicted by this project's own ablation table.
+learned chemistry would be contradicted by this project's own ablation table. Both caveats
+stand: one seed, and the regime where the task is easiest.
 
 ### Graph augmentation: a negative result that locates the bottleneck
 

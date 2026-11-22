@@ -133,20 +133,45 @@ that same plateau, the best of 30 consecutive epochs averages 0.9518 while the b
 averages 0.9468 — **about +0.005 bought by training longer, with nothing changed.** Early
 stopping let the full model draw its maximum from 29 more epochs than mean pooling got.
 
-Two estimators that remove the bias:
+### Redone at a matched budget
+
+All three variants were then trained to a fixed 63 epochs with early stopping disabled,
+so the maximum is drawn from the same number of draws in every case:
+
+| transductive, seed 0, N = 63 | best val | best epoch | test | final train loss |
+|---|---|---|---|---|
+| full (co-attention + bipartite) | 0.9518 | 53 | 0.9505 | 0.0340 |
+| mean readout | 0.9488 (−0.0031) | 47 | 0.9501 (−0.0004) | 0.0422 |
+| no bipartite GATConv | 0.9488 (−0.0031) | 63 | 0.9413 (−0.0092) | 0.0352 |
+
+**Co-attention's apparent +0.0129 advantage becomes +0.0031** — about three-quarters of it
+was the budget. Truncating the original runs to a common 34 epochs had put the residual at
++0.0010 and the max-of-N estimate had attributed ~0.005 of the gap to length; the first was
+the better predictor, and both pointed the right way.
+
+Two further estimators on the same runs, which now agree with the first:
 
 | | full | mean readout | no bipartite |
 |---|---|---|---|
-| best of the first 34 epochs (common length) | 0.9399 | 0.9389 (−0.0010) | 0.9382 (−0.0016) |
-| mean of val over epochs 25–34 | 0.9307 ± 0.0064 | 0.9259 (−0.0048) | 0.9297 (−0.0010) |
+| mean of val over epochs 25–63 (n = 39) | 0.9370 ± 0.0078 | 0.9339 (−0.0031) | 0.9352 (−0.0018) |
+| matched-epoch mean difference, all 63 epochs | — | −0.0026 | −0.0005 |
+| epochs on which the ablation *beats* the full model | — | 25 / 63 | **34 / 63** |
 
-So co-attention is worth somewhere between 0.001 and 0.005, and the bipartite
-inter-molecular GATConv is a null on every estimator. Training loss at epoch 34 is
-0.0641 / 0.0653 / 0.0655, so none of the three is capacity-starved — they fit the
-training set equally well and generalise equally well.
+The largest effect anywhere in the table is 0.0031, against a plateau standard deviation
+of 0.0078 and a range of 0.0305 — roughly 0.4 sd, with one seed and no replicates. Removing
+the bipartite GATConv leaves a model that beats the full one on *more than half* of all
+matched epochs, which is as close to a null as a single run can show. Its best epoch is
+63, the last one, so it was still improving when the budget ran out and is if anything
+under-measured here.
 
-That the inter-molecular message passing contributes nothing is worth stating plainly,
-because cross-drug attention is the distinctive idea in this architecture family.
+Test agrees on mean pooling (−0.0004) and disagrees on the bipartite layer (−0.0092),
+which is the signature of noise rather than effect. Mean pooling fits the training set
+slightly less well (0.0422 vs 0.0340) and generalises identically, so the extra capacity
+co-attention provides is spent on memorising rather than on anything that transfers.
+
+**Conclusion: neither distinctive component has a measurable effect on transductive
+performance.** That inter-molecular message passing contributes nothing is worth stating
+plainly, because cross-drug attention is the defining idea in this architecture family.
 
 **This supports the main result rather than denting it.** If neither distinctive component
 is identifiable and the model still reaches 0.950 transductive, then 0.950 is a property
@@ -166,13 +191,17 @@ of the protocol, not of the architecture.
 
 ## Status
 
-The three-regime comparison is complete and is the project's main result. The ablation
-comparison is **not** settled: both ablations are being continued to a fixed 63 epochs
-with early stopping disabled, so that all three variants share one budget and their
-best-epoch figures become comparable. Their early-stopped rows are archived in
-[`gnn_metrics_superseded.csv`](gnn_metrics_superseded.csv), not deleted. With one seed, a
-difference around 0.005 will not become significant by being measured more carefully; the
-likely honest conclusion is "no resolvable difference".
+The three-regime comparison and the ablations are both complete. The early-stopped
+versions of the ablation runs are archived in
+[`gnn_metrics_superseded.csv`](gnn_metrics_superseded.csv) rather than deleted, so the
+confounded figures remain inspectable next to the matched-budget ones.
 
-Also outstanding: the adjusted-RF bar on S1 seeds 3–4, and whether prior adjustment should
-be extended to S2 and transductive for both models.
+Two caveats attach to the ablations and should be carried into the write-up rather than
+dropped: they are a single seed, and transductive is the regime where the task is easiest,
+so "no measurable effect here" is not "no effect anywhere". Establishing either component
+as genuinely useless would need several seeds, most usefully on S2, where the GNN's
+deficit actually lives.
+
+Outstanding elsewhere: the adjusted-RF bar on S1 seeds 3–4 (the headline S1 figure has 5
+seeds against a 3-seed bar), and whether prior adjustment should be extended to S2 and
+transductive for both models.

@@ -15,11 +15,27 @@ not give you the trained models. They live in Google Drive at
 `MyDrive/ddi_project_runs/checkpoints`. Ask for access — nothing that needs a model can be
 reproduced without them.
 
-Each run writes two files, `<run>.pt` (the selected epoch) and `<run>_last.pt` (every
-epoch, so interrupted sessions resume), at ~6.3 MB each. Across the 13 reported runs plus
-the archived `*.round1b` ones that is roughly 200 MB. Only the `<run>.pt` files are needed
-for analysis; `_last.pt` matters only if a run is to be continued. Check what is actually
-there before planning around it:
+Each run writes two files: `<run>.pt`, the selected epoch (6.3 MB), and `<run>_last.pt`,
+rewritten every epoch so an interrupted Colab session can resume (19 MB — it carries
+optimizer state as well as weights). **Only the `<run>.pt` files are needed for analysis.**
+The folder also holds superseded round-1b runs, putting it over 600 MB in total, but the 15
+runs behind the reported results come to about 95 MB of `<run>.pt` files, so copy just
+those rather than the folder.
+
+Verified present on 2026-11-23, all 15 with both files — the long suffix below is
+`_L4_cwsqrt_do0.3_adamw_lr0.0005_wd0.01_fp`, which every reported run shares:
+
+| checkpoint | what it backs |
+|---|---|
+| `S1_seed{0,1,2,3,4}_coattn…` | the S1 result, 5 seeds |
+| `S2_seed{0,1,2,3,4}_coattn…` | the S2 result, 5 seeds |
+| `transductive_seed0_coattn…` | the transductive result |
+| `transductive_seed0_mean…`, `transductive_seed0_coattn_nointer…` | the matched-budget ablations |
+| `S1_seed0_mean…`, `S1_seed0_coattn_nointer…` | the earlier S1 ablations |
+
+Anything else in the folder is a superseded round-1b variant (recognisable by a `_de0.2`
+or `_ma0.15` tag, or by a missing `cwsqrt`) and is not what the results tables report.
+Re-check before planning around it:
 
 ```
 !ls -la /content/drive/MyDrive/ddi_project_runs/checkpoints

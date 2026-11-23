@@ -23,7 +23,8 @@ the write-up.
 
 Picking this up for the analysis and write-up? Start with
 [`HANDOVER.md`](HANDOVER.md) — what exists, what is still open, and what the results do
-not support.
+not support — then [`PHASE_4_AND_5.md`](PHASE_4_AND_5.md) for what to do next: the
+remaining analysis tasks with their commands and failure modes, and the plan for the paper.
 
 ## Dataset
 

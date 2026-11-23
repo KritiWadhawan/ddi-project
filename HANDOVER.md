@@ -8,6 +8,11 @@ tables contradict.
 Read [`README.md`](README.md) first for the numbers, then
 [`results/protocol_collapse.md`](results/protocol_collapse.md) for the main result.
 
+**Then go to [`PHASE_4_AND_5.md`](PHASE_4_AND_5.md)**, which is the working document for
+what remains: the three analysis tasks with their exact commands and failure modes, the
+section-by-section plan for the write-up, and the traps to warn an AI assistant about
+before letting it touch the results CSVs.
+
 ## Before you can start: you need the checkpoints
 
 `checkpoints/`, `results/logits/` and `data/` are **gitignored**, so cloning this repo does
@@ -98,8 +103,8 @@ Please check anything you write against this list.
 
 | item | what it is | cost |
 |---|---|---|
-| per-class F1 beyond S1 | [`results/per_class_f1.csv`](results/per_class_f1.csv) covers only S1 seeds 0–2 (258 rows). Extend with `src/rescore.py` against the Drive checkpoints. | GPU session, or slow on CPU |
-| prior adjustment on S2 / transductive | Neither model gets it there. Symmetric, so fair — but the RF gained +0.033 from it on S1, and a reviewer may ask why the baseline only got its best shot in one regime. `adjust.py` and `adjust_rf.py` are both S1-hardcoded. | ~1 h code + CPU |
+| per-class F1 beyond S1 | [`results/per_class_f1.csv`](results/per_class_f1.csv) covers only S1 seeds 0–2 (258 rows), GNN only. Extend with `src/adjust.py --per-class` against the Drive checkpoints. The RF half does not exist yet and needs ~20 lines. | GPU session + ~20 lines |
+| prior adjustment on S2 / transductive | Neither model gets it there. Symmetric, so fair — but the RF gained +0.033 from it on S1, and a reviewer may ask why the baseline only got its best shot in one regime. `adjust.py` already handles any split; `adjust_rf.py` is hardcoded to S1. | ~1 h code + CPU |
 | literature comparison | No published method has been re-evaluated under S1/S2 here. If published work reports transductive DrugBank in the same 0.95 band and does not report cold-start, that is what turns this from a model paper into a protocol critique. Worth checking before writing the introduction. | reading, no compute |
 
 ## The analysis that replaces the case studies

@@ -6,3 +6,6 @@ __pycache__/
 checkpoints/
 results/logits/
 *.bak
+
+# generated handover document (regenerate from PHASE_4_AND_5.md)
+*.docx

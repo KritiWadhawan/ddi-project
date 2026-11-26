@@ -72,9 +72,10 @@ after.
 
 # Phase 4 — the analysis
 
-Three tasks. Task 1 is the one the paper needs; Task 3 is the one that decides how the
-paper is framed and costs no compute, so start it in parallel. Task 2 is for the reviewer
-who asks why the baseline only got its best form in one regime of three.
+Three tasks. **Task 1 is now the priority** — Task 3 was resolved on 2026-11-27 and what it
+found is written into that section, including the fact that the two published figures we
+were worried about are not comparable quantities at all. Task 2 is for the reviewer who
+asks why the baseline only got its best form in one regime of three.
 
 ## Task 1 — Per-class F1 against training frequency
 
@@ -215,37 +216,61 @@ wins without it.
 
 **Start this first — it decides how the whole paper is framed.**
 
-> **Update, 2026-11-27: the second branch below has already triggered, provisionally.** Two
-> cold-start figures have reached us second-hand — **MDM-DDI 0.495** and **SSI-DDI 0.460**
-> for two new drugs, against our S1 0.314. **Neither is verified and neither is usable yet.**
-> Before quoting either, read their *code*, not their methods section, for three things, in
-> descending order of leverage:
+> **Resolved, 2026-11-27. Read this before planning any comparison experiment.** Two
+> cold-start figures reached us second-hand — **MDM-DDI 0.495** and **SSI-DDI 0.460** for
+> two new drugs, against our S1 0.314. Both were checked against SSI-DDI's published source
+> ([github.com/kanz76/SSI-DDI](https://github.com/kanz76/SSI-DDI)) and the finding is
+> decisive: **neither number is a Macro-F1 of the kind this project reports, and the
+> comparison is void.**
 >
-> 1. **Which label set.** Our own seed-0 S1 predictions score 0.2517 over all 86 classes,
->    0.3183 on sklearn's default, and 0.3607 over occurring classes — **a 0.11 spread from
->    label-set choice alone, on one unchanged set of outputs.** The gap to 0.46 is 0.15, so
->    this single check can account for most of it.
-> 2. **What fraction of the drug set is held out.** S1 here leaves ~1,023 training drugs of
->    1,705, i.e. roughly 40% withheld. A paper holding out 10–20% has more training data
->    *and* an easier test, and most do not state the fraction plainly.
-> 3. **Seeds.** Ours is ±0.043 over five. A single seed, or an unstated best-of, is worth
->    several hundredths by itself.
+> From the repository, read directly:
 >
-> **The experiment that settles it — now the highest-value item in Phase 4.** Run SSI-DDI's
-> published code under *our* S1 split, *our* metric, *our* five seeds. Same DrugBank
-> release, same 86 types, and the code is public. Both outcomes are useful: if it holds near
-> 0.46, the collapse story survives and our model is simply weaker, which is far better
-> learned now than after drafting; if it falls toward 0.31, the paper gets much stronger,
-> because published methods collapse too and the critique stops being an inference about one
-> model and becomes a demonstration about the field.
+> - The only F1 call in the codebase is `metrics.f1_score(target, pred)` — no `labels=`, no
+>   `average=`, so sklearn's `average='binary'`. The enclosing function then
+>   `return acc, auc_roc, auc_prc`, so **the F1 value is computed and discarded.** It is
+>   never reported anywhere.
+> - **The task is binary, not 86-class.** One sampled negative per positive
+>   (`neg_samples` default 1), with the 86 types indexing a relation matrix and the metric
+>   pooled across types. Our 0.314 is an 86-class Macro-F1. These are not the same quantity
+>   and no label-set adjustment reconciles them.
+> - Reported metrics are ACC / AUROC / AUPRC. The inductive table gives, for both drugs new,
+>   ACC 65.02 ± 0.74, AUROC 72.38 ± 1.01, AUPRC 72.83 ± 1.35 (percentages, 3 runs).
+> - No seed is set anywhere in the repo, and no split code ships with it — the data folder
+>   holds precomputed 6:2:2 pair-level CSVs. The cold-start split is described in the paper
+>   only.
 >
-> **One claim dies either way.** If published work reports cold start at all, the paper
-> cannot say the field ignores it — that sentence has to go. What survives is narrower and
-> sharper: reported cold-start numbers arrive without a fairly-calibrated simple baseline,
-> so they do not establish that the graph machinery contributes anything. The retention
-> comparison (61.5% against the forest's 73.5%) is untouched by anyone else's absolute
-> score, because it is a statement about one model relative to its baseline, not a
-> leaderboard position.
+> So 0.460 is either a later paper's reimplementation of SSI-DDI in a multi-class setting,
+> or an AUPRC/accuracy figure relabelled. **Do not quote either figure, and do not re-run
+> SSI-DDI under our split on the strength of them.** That job is not "wire in our split": it
+> is rebuilding their evaluation from binary-with-negative-sampling to 86-class, which is a
+> different and much larger piece of work than it first appears.
+>
+> **One claim of ours is dead.** [ColdDDI](https://arxiv.org/html/2610.05590) (arXiv
+> 2610.05590, 4 Oct 2026) benchmarks eight methods across S0/S1/S2 and titles its §5.1
+> *"Cold-Start Degradation Is Real and Model-Independent"*, reporting a 15–44 AUC-point drop
+> from transductive to both-drugs-new for every method. It credits GMPNN-CS with formalising
+> the drug-wise S1/S2 split and DDI-Ben (Shen et al., 2025) with adopting it. **The paper
+> therefore cannot say the field ignores cold-start evaluation.** Delete that sentence
+> wherever it appears.
+>
+> **What survives, and it is better.** ColdDDI's eight baselines are all deep models — no
+> random forest, no Morgan fingerprints, nothing classical. The simplest method in its table
+> is DeepDDI (a PCA-reduced Tanimoto similarity profile), and under both-drugs-new it scores
+> AUC **0.672**, *beating* SSI-DDI (0.627), HDN-DDI (0.645), TIGER (0.630) and MKG-FENN
+> (0.563). The simplest method in a 2026 cold-start benchmark outperforms most of the graph
+> networks and the paper does not remark on it. That is this project's finding sitting
+> unexamined in someone else's results table, and it is the gap we fill: **nobody gives a
+> cheap baseline a fairly-calibrated shot and reports the retention.** Frame the paper on
+> that, not on a novelty claim about cold-start splits.
+>
+> **Naming hazard.** Conventions conflict and a reviewer will trip on it. ColdDDI uses
+> S1 = *one* drug unseen, S2 = *both* unseen. This project uses the opposite (S1 = both,
+> S2 = one), which appears to match SSI-DDI's own `D_S1`/`D_S2`. Define both settings
+> explicitly in words at first use and never rely on the labels alone.
+>
+> **Still worth doing, cheaply.** Verify the SSI-DDI inductive table and its split
+> description against the PDF — those came from a partial fetch, not verbatim text — and
+> find where 0.495 and 0.460 actually originate. Reading only; no compute.
 
 No published method has been re-evaluated under S1/S2 in this project, and that is the
 honest limitation. What needs establishing is what published work actually reports.
@@ -297,9 +322,13 @@ loss from unseeing one drug). Do not lead with 0.950.
 is a new drug, where both or one of the pair is unseen. Then what Task 3 found about what
 the literature reports.
 
-**Related work.** Driven by Task 3. State explicitly that no published method was
-re-evaluated here under S1/S2 — it is a limitation of this work, and naming it is better
-than letting a reviewer find it.
+**Related work.** Driven by Task 3, and constrained by it. Cold-start DDI evaluation is an
+active area — ColdDDI (2026), DDI-Ben (2025), GMPNN-CS, OpenDDI (2026) — so do **not** claim
+the field ignores it. Position against what those benchmarks leave out instead: none gives a
+classical fingerprint baseline a fairly-calibrated shot, and ColdDDI's own table has its
+simplest method (DeepDDI, AUC 0.672 on both-drugs-new) beating most of its graph networks
+without comment. Still state plainly that no published method was re-evaluated here under
+S1/S2 — it is a real limitation, and naming it beats letting a reviewer find it.
 
 **Data and protocols.** 191,808 → 190,986 cleaned pairs, 1,705 drugs, 86 classes, class 49
 = 32%. The three splits with their sizes and seed counts. Two things must appear here:

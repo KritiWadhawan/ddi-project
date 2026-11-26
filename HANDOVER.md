@@ -78,8 +78,12 @@ Please check anything you write against this list.
 1. **S1 is parity, not a win.** The +0.044 is against the RF *as trained*. The honest
    baseline is the RF with its own validation-tuned prior adjustment, which is a genuine
    gain for the RF and gave the GNN nothing
-   ([`results/logit_adjustment.md`](results/logit_adjustment.md)). Against that bar the GNN
-   is roughly level. Use the adjusted bar.
+   ([`results/logit_adjustment.md`](results/logit_adjustment.md)). Against that bar, over
+   five seeds: **RF 0.3150 ± 0.0272 vs GNN 0.3138 ± 0.0425.** The baseline is nominally
+   ahead by 0.0012; the GNN wins 3 seeds of 5; the paired difference is −0.0012 against a
+   paired sd of 0.0253. That is indistinguishable, so write "matches" and never "beats".
+   Note also that the calibrated RF is the **more stable** of the two (sd 0.027 vs 0.043).
+   Use the adjusted bar.
 2. **The ablations are one seed, in the easiest regime.** Neither the co-attention pooling
    nor the bipartite cross-drug GATConv has a measurable effect on transductive (largest
    difference 0.0031 against a plateau sd of 0.0078). That is *not* "the architecture is
@@ -103,8 +107,8 @@ Please check anything you write against this list.
 
 | item | what it is | cost |
 |---|---|---|
-| per-class F1 beyond S1 | [`results/per_class_f1.csv`](results/per_class_f1.csv) covers only S1 seeds 0–2 (258 rows), GNN only. Extend with `src/adjust.py --per-class` against the Drive checkpoints. The RF half does not exist yet and needs ~20 lines. | GPU session + ~20 lines |
-| prior adjustment on S2 / transductive | Neither model gets it there. Symmetric, so fair — but the RF gained +0.033 from it on S1, and a reviewer may ask why the baseline only got its best shot in one regime. `adjust.py` already handles any split; `adjust_rf.py` is hardcoded to S1. | ~1 h code + CPU |
+| per-class F1 **regenerate, do not extend** | [`results/per_class_f1.csv`](results/per_class_f1.csv) holds S1 seeds 0–2 (258 rows), GNN only — and its rows are stale. It was written by `037f3ef` on 2026-11-17, *before* `ca75763` fixed checkpoint selection on 11-18; the reported five-seed runs came later still (`5b993b0`, 11-22). Proof: `predict()` is a plain `argmax` at τ = 0, so this file's per-seed means would have to equal the reported `macro_f1_all86` exactly, and they differ by −0.0146 / +0.0004 / −0.0008 — inconsistent in sign, so superseded checkpoints rather than a τ offset. Regenerate everything with `src/adjust.py --per-class --tau-min 0 --tau-max 0`, then extend to S2 and transductive. The RF half does not exist and needs ~20 lines. | GPU session + ~20 lines |
+| prior adjustment on S2 / transductive | Neither model gets it there. Symmetric, so fair — but the RF gains from it on S1 (+0.045 over five seeds, 0.2697 → 0.3150), and a reviewer may ask why the baseline only got its best shot in one regime. `adjust.py` already handles any split; `adjust_rf.py` is hardcoded to S1, cache filename included. The τ-selection metric in both scripts was corrected on 2026-11-27 ([`results/logit_adjustment.md`](results/logit_adjustment.md)), so fresh runs are comparable to the current tables. | ~1 h code + CPU |
 | literature comparison | No published method has been re-evaluated under S1/S2 here. If published work reports transductive DrugBank in the same 0.95 band and does not report cold-start, that is what turns this from a model paper into a protocol critique. Worth checking before writing the introduction. | reading, no compute |
 
 ## The analysis that replaces the case studies

@@ -3,7 +3,7 @@
 **Summary: prior adjustment does not help the GNN — an apparent +0.021 test Macro-F1 was
 an artefact of how Macro-F1 was being averaged, and finding that is why the project changed
 its primary metric. Applying the same procedure to the Random Forest baseline, as a fairness
-check, turned out to help it genuinely (+0.033), so the strongest baseline is now the
+check, turned out to help it genuinely (+0.033 on seeds 0–2; +0.045 over all five), so
 adjusted RF.**
 
 ## What was tried and why
@@ -72,11 +72,23 @@ The RF behaves oppositely to the GNN. Its optimum is **positive** (`tau = +0.15`
 gain **survives the fixed label set**, so it is real and not a divisor effect:
 
 > **Later extension.** This section's figures are seeds 0–2, the seeds available when the
-> experiment was run. The adjusted bar was afterwards extended to all five S1 seeds:
-> selecting one shared `tau` across five seeds returns **the same `tau = 0.15`**, so
-> nothing below changes, and the five-seed bar is **0.3148 ± 0.0277** against the GNN's
-> **0.3138 ± 0.0425** — parity, the GNN ahead on 3 seeds of 5
+> experiment was run. The adjusted bar was afterwards extended to all five S1 seeds. The
+> five-seed bar is **0.3150 ± 0.0272** against the GNN's **0.3138 ± 0.0425** — parity, with
+> the RF nominally ahead by 0.0012 on the mean and the GNN ahead on 3 seeds of 5
 > ([protocol_collapse.md](protocol_collapse.md)).
+>
+> **Selection-metric correction (2026-11-27).** Both adjust scripts originally selected
+> `tau` on sklearn's *default* label set — the very metric this page exists to discredit.
+> That is a real defect, and a specific one: the default label set is
+> `union(y_true, y_pred)`, and `tau` is the knob controlling how many rare classes enter
+> `y_pred`, so **the label set moved with the parameter being tuned**. Raising `tau` added
+> newly-predicted absent classes to the average at F1 ≈ 0, penalising large `tau` for a
+> reason unrelated to prediction quality, which biases the selected `tau` low. Both scripts
+> now select on `macro_f1_occurring`, whose label set is `np.unique(y_true)` and so is fixed
+> across the sweep. Re-run over five seeds: `tau*` moves **0.15 → 0.20** in the predicted
+> direction, and the five-seed bar moves **0.3148 → 0.3150, i.e. +0.0001**. The conclusion
+> does not change and is now demonstrably insensitive to the defect — but the selected
+> `tau` is defensible if a reviewer asks how it was chosen, which it previously was not.
 >
 > The GNN figure below (0.3202) is the round-1b checkpoint, which is what this experiment's
 > cached logits came from. That run was later superseded by a re-run under the corrected
@@ -132,7 +144,7 @@ model that needs no inference-time correction at all.
 
 ```bash
 python src/adjust.py --ckpt "checkpoints/S1_seed*_L4_*_fp.pt" --device cpu \
-    --tau-min -0.8 --tau-max 0.3 --tau-step 0.05 --per-class
+    --tau-min -0.8 --tau-max 1.5 --tau-step 0.05 --per-class
 ```
 
 Checkpoints live in Google Drive under `ddi_project_runs/checkpoints/`. Logits are cached

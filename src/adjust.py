@@ -104,11 +104,12 @@ def logits_for(ckpt_path: Path, device: str, batch_size: int = 512) -> dict:
 def macro_f1_true_labels(y, pred) -> float:
     """Macro-F1 averaged only over the classes present in y_true.
 
-    scores() follows sklearn's default label set (classes in y_true OR y_pred), which is
-    what every other table in this project uses, so that stays the headline. But raising
-    tau makes the model predict more rare classes, and any it predicts that never occur
-    score 0 and enter the average -- so this variant separates "predicts rare classes
-    better" from "predicts rare classes that aren't there".
+    This is the project's primary metric (macro_f1_occurring in the results tables) and
+    it is what selects tau. Its label set depends only on y_true, so it is fixed across a
+    tau sweep. sklearn's default label set -- union(y_true, y_pred) -- is not: raising tau
+    makes the model predict more rare classes, and any it predicts that never occur score
+    0 and enter the average. That penalises large tau for a reason unrelated to whether
+    the predictions improved, so selecting on the default label set biases tau low.
     """
     return f1_score(y, pred, average="macro", labels=np.unique(y), zero_division=0)
 
@@ -150,11 +151,15 @@ def main():
         print(f"  {q.stem[:46]:46s} val {scores(d['val_y'], d['val_logits'].argmax(1), CLASSES_0BASED)['macro_f1']:.4f}"
               f"  test {m['macro_f1']:.4f}")
 
-    # One shared tau, selected on mean validation macro-F1 across seeds.
+    # One shared tau, selected on mean validation macro_f1_occurring across seeds.
+    # The label set must not move with tau. sklearn's default is union(y_true, y_pred),
+    # so raising tau adds the rare classes the model starts predicting to the average at
+    # F1 ~ 0 and penalises tau for a reason unrelated to prediction quality -- which
+    # biases the selected tau low. np.unique(y_true) is fixed across the sweep.
     curve = []
     for tau in taus:
-        vals = [f1_score(d["val_y"], predict(d["val_logits"], d["prior"], tau),
-                         average="macro", zero_division=0) for d in runs]
+        vals = [macro_f1_true_labels(d["val_y"], predict(d["val_logits"], d["prior"], tau))
+                for d in runs]
         curve.append(np.mean(vals))
     curve = np.array(curve)
     best = int(curve.argmax())
@@ -170,8 +175,8 @@ def main():
     # only: three taus fitted on validation would be three hyperparameters, not one.
     print("per-seed best tau on validation (diagnostic, not used):")
     for d in runs:
-        per = [f1_score(d["val_y"], predict(d["val_logits"], d["prior"], tau),
-                        average="macro", zero_division=0) for tau in taus]
+        per = [macro_f1_true_labels(d["val_y"], predict(d["val_logits"], d["prior"], tau))
+               for tau in taus]
         j = int(np.argmax(per))
         shared = per[int(np.argmin(np.abs(taus - tau_star)))]
         print(f"  seed {d['meta'][1]}: best tau={taus[j]:4.2f} -> val {per[j]:.4f}"

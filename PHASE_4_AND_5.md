@@ -97,7 +97,20 @@ per-class pattern is what separates "memorisation" from "fragility".
 
 [`results/per_class_f1.csv`](results/per_class_f1.csv), 258 rows = 86 classes × 3 seeds.
 Columns: `model, split, seed, class, train_frac, test_support, f1`. **S1 only, seeds 0–2
-only, GNN only.**
+only, GNN only — and every row is stale.**
+
+**Treat the existing rows as unusable.** The file was written by `037f3ef` on 2026-11-17.
+`ca75763` fixed checkpoint selection on 11-18, and the five-seed runs the paper reports came
+later still (`5b993b0`, 11-22), so these rows describe superseded checkpoints. The check
+that proves it: `predict()` returns a plain `argmax` at τ = 0, so this file's per-seed means
+would have to equal the reported `macro_f1_all86` *exactly*. They differ by −0.0146,
++0.0004 and −0.0008 — inconsistent in sign and magnitude, which means different checkpoints
+rather than a τ offset. Regenerate the whole file before extending it.
+
+One thing that works in your favour: `src/adjust.py` stamps its cached logits with the
+checkpoint's size and mtime and recomputes when either changes, so the stale Nov-17 caches
+sitting in `results/logits/` will invalidate themselves rather than silently reproducing the
+old numbers. `adjust_rf.py` has no equivalent check — it trusts `cache.exists()` alone.
 
 ### What is missing, and what each piece costs
 
@@ -167,8 +180,9 @@ scatter without carrying information.
 
 ### Why
 
-The RF gained +0.033 on S1 from validation-tuned prior adjustment, which is what turned the
-S1 comparison from "GNN ahead +0.044" into parity. Neither model receives it on S2 or
+The RF gains on S1 from validation-tuned prior adjustment (+0.045 over five seeds,
+0.2697 → 0.3150), which is what turned the S1 comparison from "GNN ahead +0.044" into
+parity. Neither model receives it on S2 or
 transductive. That is symmetric, and therefore fair — but a reviewer will ask why the
 baseline was given its best form in only one regime of three, and on S2 the RF already
 wins without it.
@@ -199,8 +213,39 @@ wins without it.
 
 ## Task 3 — The literature comparison
 
-**No compute. Start this first — it decides how the whole paper is framed, and it is pure
-reading.**
+**Start this first — it decides how the whole paper is framed.**
+
+> **Update, 2026-11-27: the second branch below has already triggered, provisionally.** Two
+> cold-start figures have reached us second-hand — **MDM-DDI 0.495** and **SSI-DDI 0.460**
+> for two new drugs, against our S1 0.314. **Neither is verified and neither is usable yet.**
+> Before quoting either, read their *code*, not their methods section, for three things, in
+> descending order of leverage:
+>
+> 1. **Which label set.** Our own seed-0 S1 predictions score 0.2517 over all 86 classes,
+>    0.3183 on sklearn's default, and 0.3607 over occurring classes — **a 0.11 spread from
+>    label-set choice alone, on one unchanged set of outputs.** The gap to 0.46 is 0.15, so
+>    this single check can account for most of it.
+> 2. **What fraction of the drug set is held out.** S1 here leaves ~1,023 training drugs of
+>    1,705, i.e. roughly 40% withheld. A paper holding out 10–20% has more training data
+>    *and* an easier test, and most do not state the fraction plainly.
+> 3. **Seeds.** Ours is ±0.043 over five. A single seed, or an unstated best-of, is worth
+>    several hundredths by itself.
+>
+> **The experiment that settles it — now the highest-value item in Phase 4.** Run SSI-DDI's
+> published code under *our* S1 split, *our* metric, *our* five seeds. Same DrugBank
+> release, same 86 types, and the code is public. Both outcomes are useful: if it holds near
+> 0.46, the collapse story survives and our model is simply weaker, which is far better
+> learned now than after drafting; if it falls toward 0.31, the paper gets much stronger,
+> because published methods collapse too and the critique stops being an inference about one
+> model and becomes a demonstration about the field.
+>
+> **One claim dies either way.** If published work reports cold start at all, the paper
+> cannot say the field ignores it — that sentence has to go. What survives is narrower and
+> sharper: reported cold-start numbers arrive without a fairly-calibrated simple baseline,
+> so they do not establish that the graph machinery contributes anything. The retention
+> comparison (61.5% against the forest's 73.5%) is untouched by anyone else's absolute
+> score, because it is a statement about one model relative to its baseline, not a
+> leaderboard position.
 
 No published method has been re-evaluated under S1/S2 in this project, and that is the
 honest limitation. What needs establishing is what published work actually reports.
@@ -271,8 +316,9 @@ than letting a reviewer find it.
 2. The retention table — this is the contribution; give it a figure.
 3. The accuracy inversion (RF is *more accurate* in both cold-start regimes: S1 0.465 vs
    0.444, S2 0.726 vs 0.695). It cuts against the model, which is why it belongs.
-4. S1 parity against the adjusted RF: 0.3148 ± 0.0277 vs 0.3138 ± 0.0425 over five seeds,
-   GNN ahead on 3 of 5. Note the adjusted RF also has the *lower* variance.
+4. S1 parity against the adjusted RF: 0.3150 ± 0.0272 vs 0.3138 ± 0.0425 over five seeds,
+   GNN ahead on 3 of 5, paired difference −0.0012 ± 0.0253. Note the adjusted RF also has
+   the *lower* variance.
 5. The ablations, at matched budget, with the max-of-N caveat.
 6. Task 1's per-class analysis, if it comes out.
 

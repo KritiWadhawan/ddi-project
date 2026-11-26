@@ -19,7 +19,6 @@ import csv
 from pathlib import Path
 
 import numpy as np
-from sklearn.metrics import f1_score
 
 from adjust import macro_f1_true_labels, predict
 from baselines import CLASSES_0BASED, METRICS, _to_features, fit_rf, scores
@@ -80,9 +79,11 @@ def main():
         t = scores(d["test_y"], d["test_logits"].argmax(1), CLASSES_0BASED)["macro_f1"]
         print(f"  seed {s}: val {v:.4f}  test {t:.4f}")
 
+    # Selected on macro_f1_occurring, whose label set is np.unique(y_true) and so does
+    # not move with tau -- see the note in adjust.py's main() for why that matters.
     curve = np.array([
-        np.mean([f1_score(d["val_y"], predict(d["val_logits"], d["prior"], tau),
-                          average="macro", zero_division=0) for d in runs])
+        np.mean([macro_f1_true_labels(d["val_y"], predict(d["val_logits"], d["prior"], tau))
+                 for d in runs])
         for tau in taus
     ])
     tau_star = float(taus[int(curve.argmax())])

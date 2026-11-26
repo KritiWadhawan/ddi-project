@@ -154,20 +154,21 @@ parameters, ~40% less time per epoch, and a third of the variance across seeds.
 |---|---|
 | GNN, 4 layers + fingerprint fusion | 0.3138 ± 0.0425 |
 | Morgan fingerprint + Random Forest, as trained | 0.2696 ± 0.0433 |
-| Random Forest + validation-tuned prior adjustment (τ = 0.15) | **0.3148 ± 0.0277** |
+| Random Forest + validation-tuned prior adjustment (τ = 0.20) | **0.3150 ± 0.0272** |
 
 Investigating prior adjustment for the GNN (where it gave nothing) revealed that the same
 correction helps the *Random Forest* substantially, because the GNN's sqrt class weights
 already correct for imbalance while the RF's `predict_proba` argmax does not. Given the
-same validation-tuned treatment the RF reaches 0.3148 against the GNN's 0.3138:
-**−0.0011, with the GNN ahead on 3 seeds of 5** and a per-seed spread of ±0.018 that
+same validation-tuned treatment the RF reaches 0.3150 against the GNN's 0.3138:
+**−0.0012, with the GNN ahead on 3 seeds of 5** and a per-seed spread of ±0.025 that
 dwarfs the difference between the means. S1 is parity in the strict sense — not a narrow
 win for either model. The adjusted RF also has the lower seed-to-seed variance of the two.
 Full reasoning in [`results/logit_adjustment.md`](results/logit_adjustment.md).
 
-One shared τ is chosen on validation across all five seeds, not one per seed. Selecting it
-over five seeds returns the same τ = 0.15 that three seeds did, so the earlier three-seed
-figures are unchanged by the extension.
+One shared τ is chosen on validation across all five seeds, not one per seed, and on
+`macro_f1_occurring`, whose label set does not move as τ moves. Correcting that selection
+metric shifted τ from 0.15 to 0.20 and the bar by +0.0001, so the parity conclusion does
+not depend on how τ was picked.
 
 ### Architecture ablations
 

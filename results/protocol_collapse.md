@@ -81,24 +81,25 @@ the GNN nothing — the asymmetry is explained in
 |---|---|
 | GNN, 4 layers + fingerprint fusion | 0.3138 ± 0.0425 |
 | RF + Morgan, as trained | 0.2696 ± 0.0433 |
-| RF + Morgan + validation-tuned prior adjustment (τ = 0.15) | **0.3148 ± 0.0277** |
+| RF + Morgan + validation-tuned prior adjustment (τ = 0.20) | **0.3150 ± 0.0272** |
 
 | per seed | 0 | 1 | 2 | 3 | 4 |
 |---|---|---|---|---|---|
 | GNN | 0.3607 | 0.3462 | 0.2754 | 0.3221 | 0.2645 |
-| adjusted RF | 0.3410 | 0.3430 | 0.2806 | 0.3152 | 0.2943 |
-| difference | +0.0197 | +0.0032 | −0.0052 | +0.0068 | −0.0299 |
+| adjusted RF | 0.3262 | 0.3449 | 0.2752 | 0.3277 | 0.3010 |
+| difference | +0.0346 | +0.0014 | +0.0002 | −0.0056 | −0.0366 |
 
-**−0.0011 ± 0.0184, the GNN ahead on 3 seeds of 5.** This is parity in the strict sense:
+**−0.0012 ± 0.0253, the GNN ahead on 3 seeds of 5.** This is parity in the strict sense:
 the difference between the means is 0.001 while the per-seed differences range over
-0.05, so the two models are indistinguishable on S1 and neither can be said to lead. The
-adjusted RF additionally has the lower variance across seeds (±0.028 vs ±0.043), so the
+0.07, so the two models are indistinguishable on S1 and neither can be said to lead. The
+adjusted RF additionally has the lower variance across seeds (±0.027 vs ±0.043), so the
 GNN is not even the more *reliable* of the two in this regime.
 
-One shared τ is selected on validation across all five seeds, not one per seed. Doing so
-returns τ = 0.15, the same value three seeds had chosen, so the extension leaves the
-previously reported seeds 0–2 figures (GNN 0.3274, adjusted RF 0.3215) exactly as they
-were — a small robustness check on the selection that came for free.
+One shared τ is selected on validation across all five seeds, not one per seed, and on
+`macro_f1_occurring` — whose label set cannot move as τ moves. Correcting that selection
+metric on 2026-11-27 shifted τ from 0.15 to 0.20 and the bar from 0.3148 to **0.3150, a
+change of +0.0001** ([logit_adjustment.md](logit_adjustment.md)). The parity conclusion is
+therefore insensitive to how τ was chosen, which is worth more than the τ value itself.
 
 Prior adjustment has also not been extended to S2 or transductive. Neither model receives
 it there, which is symmetric and therefore fair, but it does mean the S2 comparison is not
